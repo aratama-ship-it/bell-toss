@@ -234,8 +234,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   }
 
   /* --- 1候補の計画 ---
-     ring を perf の hand(handIdx) が投げ、キャッチ時刻 t で鳴らす。 */
-  function planToss(ring, perf, handIdx, t, isNew) {
+     ring を perf の hand(handIdx) が投げ、キャッチ時刻 t で鳴らす。
+     forceCatch指定時（保持キャッチ和音用）: キャッチ手を{perf,hand,chordRing}に固定し、
+     その手が chordRing を静かに持ったままでも「和音」としてキャッチを許可する。 */
+  function planToss(ring, perf, handIdx, t, isNew, forceCatch) {
     if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
     if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
 
@@ -359,42 +361,48 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 
     // キャッチ手の候補: 自分の両手 ＋（パッシング有効なら）他の演者の手。
     // 投げ渡し(パス)はリングの持ち主がキャッチした演者に移る。
+    // forceCatch指定時は「保持キャッチ和音」用に、その特定の(演者,手)だけを候補にする
+    // （その手はforceCatch.chordRingを静かに持ったままキャッチを迎え、両方鳴って和音になる）。
     let bestCatch = null;
-    for (const q of perfs) {
-      for (let c = 0; c < 2; c++) {
-        const isSelf = q.id === perf.id;
-        if (!isSelf && passCost === Infinity) continue;
-        const ch = q.hands[c];
-        if (!isFree(ch, t, t + C.T_CATCH)) continue;
-        const held = holdingAt(ch, t);
-        const heldOk = held == null
-          || (isSelf && c === handIdx && (held === storedPoss || held.ring === ring.id));
-        if (!heldOk) continue;
-        // 受け手が直後に自分の担当音を投げる予定なら、その手を塞ぐパスは避ける
-        // （パスでリングが集まると、担当音を出せなくなって破綻する）
-        // パス多めの設定では、この回避を弱める（受け手の余裕より見た目のパスを優先）。
-        // 強すぎると3人編成では常にペナルティがかかりパスがほぼ起きなくなる（実測）。
-        const base = cfg.passMode === "more" ? 0 : 1;
-        const lv = Math.min(2, base + avoidLevel);
-        const avoidWin = [1.2, 2.0, 2.8][lv];
-        const avoidCost = [0.4, 1.0, 2.0][lv];
-        let busySoon = 0;
-        if (!isSelf) {
-          for (const other of rings) {
-            if (other.home !== q.id || other.id === ring.id) continue;
-            const nt = nextNeed(other.midi, t - 0.01);
-            if (nt != null && nt - t < avoidWin) busySoon += avoidCost;
-          }
+    const catchTargets = forceCatch
+      ? [[forceCatch.perf, forceCatch.hand]]
+      : perfs.flatMap(q => [[q, 0], [q, 1]]);
+    for (const [q, c] of catchTargets) {
+      const isSelf = q.id === perf.id;
+      if (!isSelf && passCost === Infinity) continue;
+      const ch = q.hands[c];
+      if (!isFree(ch, t, t + C.T_CATCH)) continue;
+      const held = holdingAt(ch, t);
+      const isChord = !!(forceCatch && held && held.ring === forceCatch.chordRing);
+      const heldOk = held == null
+        || (isSelf && c === handIdx && (held === storedPoss || held.ring === ring.id))
+        || isChord;
+      if (!heldOk) continue;
+      // 受け手が直後に自分の担当音を投げる予定なら、その手を塞ぐパスは避ける
+      // （パスでリングが集まると、担当音を出せなくなって破綻する）
+      // パス多めの設定では、この回避を弱める（受け手の余裕より見た目のパスを優先）。
+      // 強すぎると3人編成では常にペナルティがかかりパスがほぼ起きなくなる（実測）。
+      const base = cfg.passMode === "more" ? 0 : 1;
+      const lv = Math.min(2, base + avoidLevel);
+      const avoidWin = [1.2, 2.0, 2.8][lv];
+      const avoidCost = [0.4, 1.0, 2.0][lv];
+      let busySoon = 0;
+      if (!isSelf) {
+        for (const other of rings) {
+          if (other.home !== q.id || other.id === ring.id) continue;
+          const nt = nextNeed(other.midi, t - 0.01);
+          if (nt != null && nt - t < avoidWin) busySoon += avoidCost;
         }
-        const cc = (isSelf ? (c === handIdx ? 0.25 : 0) : passCost) + q.load * 0.3 + busySoon;
-        if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc };
       }
+      const cc = (isSelf ? (c === handIdx ? 0.25 : 0) : passCost) + q.load * 0.3 + busySoon;
+      if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc, chord: isChord };
     }
     if (!bestCatch) return null;
 
     return {
       kind: "toss", ring, perf, handIdx, isNew,
       catchPerf: bestCatch.q, catchHand: bestCatch.c,
+      chordRing: bestCatch.chord ? forceCatch.chordRing : null,
       storeDur, storeTo, storedPoss,
       acqDur: found.acqDur, acqFrom: found.acqFrom, acqStart,
       restock: found.restock || null,
@@ -403,6 +411,84 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         + Math.abs(cfg.flight - f) * 0.3 + lead * 0.05
         + (found.restock ? 0.5 : 0) + bestCatch.cc,
     };
+  }
+
+  /* --- 保持キャッチ和音 ---
+     演者テクニック: 片手にリングを1本静かに持ったまま、別のリングをその同じ手で
+     キャッチすると両方が鳴って和音になる。1人の手で2音を同時に出せるため、
+     音高数に対して演者が足りない曲でも成立させられる（2026-08-22 追加）。
+
+     制約: キャッチ直後、その手は必ず1本に戻す（＝保持していたリングを
+     逆の手／脇／スタンドへ逃がす）。2本を持ったままにすると、以降の
+     possConflict（「その手が今どのリングを持っているか」の前提）が壊れるため。
+     この分離が成立する経路が見つからない場合、和音そのものを不採用にする。 */
+
+  // 和音キャッチ後、handIdx の手から heldRingId を逃がす経路を探す（逆の手→脇→スタンドの優先順）
+  function planSeparation(perf, handIdx, ringId, after) {
+    const hand = perf.hands[handIdx];
+    const otherIdx = 1 - handIdx;
+    const other = perf.hands[otherIdx];
+    if (isFree(other, after, after + C.T_HANDOFF)
+        && possConflict(other, after, Infinity, ringId).kind === "none") {
+      return { perf, handIdx, ringId, to: "otherhand", start: after, dur: C.T_HANDOFF, cost: C.T_HANDOFF };
+    }
+    if (wakiHasRoom(perf, after, null)) {
+      return { perf, handIdx, ringId, to: "waki", start: after, dur: C.T_WAKI, cost: C.T_WAKI };
+    }
+    if (bodyFree(perf, after, after + T_STAND)) {
+      return { perf, handIdx, ringId, to: "stand", start: after, dur: T_STAND, cost: T_STAND };
+    }
+    return null;
+  }
+
+  // noteA・noteB（同時刻）を、片方の手だけで和音として成立させられるか探す。
+  // 双方向（Aを保持/Bを保持）と、既存リング・複製の両方を試す。
+  function planChordPair(noteA, noteB) {
+    const t = noteA.t;
+    let best = null;
+    for (const [heldNote, newNote] of [[noteA, noteB], [noteB, noteA]]) {
+      for (const heldRing of rings) {
+        if (heldRing.midi !== heldNote.midi || heldRing.loc !== "hand") continue;
+        const heldPerf = perfs[heldRing.owner];
+        const heldHand = heldRing.hand;
+        const hand = heldPerf.hands[heldHand];
+        const held = holdingAt(hand, t);
+        // 「今まさに静かに持っている」状態のみ対象（投げ待ち等の途中状態は除く）
+        if (!held || held.ring !== heldRing.id || held.to !== Infinity) continue;
+
+        const sep = planSeparation(heldPerf, heldHand, heldRing.id, t + C.T_CATCH);
+        if (!sep) continue; // 分離できないなら和音は不採用
+
+        const forceCatch = { perf: heldPerf, hand: heldHand, chordRing: heldRing.id };
+        const tossCandidates = [];
+        for (const ring2 of rings) {
+          if (ring2.midi !== newNote.midi) continue;
+          const p2 = perfs[ring2.owner];
+          for (let h2 = 0; h2 < 2; h2++) {
+            const p = planToss(ring2, p2, h2, t, false, forceCatch);
+            if (p) tossCandidates.push(p);
+          }
+        }
+        if (pitchCount(newNote.midi) < cfg.maxDup) {
+          for (const p2 of perfs) {
+            for (let h2 = 0; h2 < 2; h2++) {
+              const ghost = { id: -1, midi: newNote.midi, owner: p2.id, loc: "stand", readyAt: C.PREP, hand: null };
+              const p = planToss(ghost, p2, h2, t, true, forceCatch);
+              if (p) tossCandidates.push(p);
+            }
+          }
+        }
+
+        for (const tp of tossCandidates) {
+          const totalCost = tp.cost + sep.cost + (jitter ? rnd() * jitter : 0);
+          if (!best || totalCost < best.cost) {
+            best = { cost: totalCost, tossPlan: tp, heldRing, heldPerf, heldHand,
+              heldNote, newNote, sep };
+          }
+        }
+      }
+    }
+    return best;
   }
 
   function planShake(ring, perf, handIdx, t, isNew) {
@@ -520,7 +606,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       actions.push({ type: "catch", perf: cq.id, hand: plan.catchHand,
         throwPerf: perf.id, throwHand: plan.handIdx, pass: isPass,
         ring: ring.id, t, dur: C.T_CATCH, noteIdx: note.idx, midi: note.midi,
-        throwTime: plan.throwTime });
+        throwTime: plan.throwTime,
+        // 注意: chordRingはリングID（0もあり得る）なので真偽値としてではなく != null で判定する
+        chord: plan.chordRing != null, chordRole: plan.chordRing != null ? "new" : undefined });
       hand.busy.push([plan.throwTime, plan.throwTime + C.T_THROW]);
       airborne.push({ perf: perf.id, from: plan.throwTime, to: t });
       if (cq.id !== perf.id) airborne.push({ perf: cq.id, from: plan.throwTime, to: t });
@@ -551,13 +639,17 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     holdPerf.load++;
 
     // キャッチ後のパーキング: 次の使用が遠いリングは手から戻し、手と脇を空けておく
+    // 和音キャッチ（plan.chordRing）はここでは何もしない: この直後 applyChordPlan が
+    // 保持していたリングを専用の分離経路（sep、脇枠を予約済み）で逃がす。
+    // ここでも脇へパークすると同じ脇枠を二重予約してしまう。
     const nn = nextNeed(note.midi, t);
     const gap = nn == null ? Infinity : nn - t;
     const after0 = plan.kind === "toss" ? t + C.T_CATCH : t + C.T_SHAKE;
     // 置き場の選択。スタンドは体ごと動くため曲中は原則使わない
     // （手・脇に収まっているうちは戻さない。戻すと次に取り出すのに4秒かかり破綻する）。
     let park = null;
-    if (gap > 2.5 && wakiHasRoom(holdPerf, after0, null)) park = "waki";
+    if (plan.chordRing != null) park = null; // リングID0もあるので != null で判定
+    else if (gap > 2.5 && wakiHasRoom(holdPerf, after0, null)) park = "waki";
     else if (nn == null && t > 0) park = null; // 曲が終わるなら持ったままでよい
     if (park) {
       const after = plan.kind === "toss" ? t + C.T_CATCH : t + C.T_SHAKE;
@@ -579,6 +671,50 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     }
   }
 
+  // 和音キャッチ後、保持していたリングを sep（planSeparationの結果）に従って手から逃がす
+  function commitSeparation(sep) {
+    const perf = sep.perf, handIdx = sep.handIdx, hand = perf.hands[handIdx];
+    const ring = rings[sep.ringId];
+    actions.push({ type: "store", perf: perf.id, hand: handIdx, ring: ring.id,
+      t: sep.start, dur: sep.dur, to: sep.to, midi: ring.midi });
+    if (sep.to === "stand") bodyOccupy(perf, sep.start, sep.start + sep.dur);
+    else hand.busy.push([sep.start, sep.start + sep.dur]);
+    closePoss(hand, ring.id, sep.start);
+    ring.readyAt = sep.start + sep.dur;
+    if (sep.to === "otherhand") {
+      const otherIdx = 1 - handIdx;
+      const other = perf.hands[otherIdx];
+      other.busy.push([sep.start, sep.start + sep.dur]);
+      other.poss.push({ ring: ring.id, from: sep.start + sep.dur, to: Infinity });
+      ring.loc = "hand";
+      ring.hand = otherIdx;
+    } else {
+      ring.loc = sep.to;
+      ring.hand = null;
+      if (sep.to === "waki") wakiEnter(perf, ring.id, sep.start + sep.dur, null);
+    }
+  }
+
+  // 保持キャッチ和音を確定する: 新しいリングの投げ・キャッチは通常のapplyPlanで処理し、
+  // 保持していたリングの音を確定させたうえで、その手から分離する。
+  function applyChordPlan(cp) {
+    // 新しいリング（複製）による和音の場合、ここでゴースト(id:-1)を実リングへ差し替える
+    // （scheduleNoteIndependentlyの isNew 処理と同じ。抜けるとリング参照が壊れる）。
+    if (cp.tossPlan.isNew) {
+      const real = newRing(cp.newNote.midi, cp.tossPlan.perf.id);
+      real.loc = "stand";
+      cp.tossPlan.ring = real;
+    }
+    applyPlan(cp.tossPlan, cp.newNote);
+    const t = cp.newNote.t;
+    actions.push({ type: "catch", perf: cp.heldPerf.id, hand: cp.heldHand, ring: cp.heldRing.id,
+      t, dur: 0, noteIdx: cp.heldNote.idx, midi: cp.heldNote.midi, chord: true, chordRole: "held" });
+    noteResults[cp.heldNote.idx] = { kind: "toss", perf: cp.heldPerf.id, hand: cp.heldHand,
+      ring: cp.heldRing.id, chord: true };
+    cp.heldPerf.load++;
+    commitSeparation(cp.sep);
+  }
+
   function fmtTime(t) {
     const m = Math.floor(Math.max(0, t) / 60);
     const s = (Math.max(0, t) % 60).toFixed(1);
@@ -587,8 +723,8 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 
   preassign();
 
-  /* --- メインループ: 音符を時刻順に割り当てる --- */
-  for (const note of notes) {
+  /* --- 1音符を独立に割り当てる（和音でない場合の通常経路） --- */
+  function scheduleNoteIndependently(note) {
     const candidates = [];
 
     for (const ring of rings) {
@@ -643,7 +779,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
         msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: どの演者も間に合いません（演者を増やす／テンポを落とす／滞空を短くする）` });
       noteResults[note.idx] = { kind: "fail" };
-      continue;
+      return;
     }
 
     if (best.isNew) {
@@ -652,6 +788,38 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       best.ring = real;
     }
     applyPlan(best, note);
+  }
+
+  // 同時刻（和音）の音符をグループ化。notesは(t,midi)でソート済みなので連続走査でよい。
+  const moments = [];
+  for (const note of notes) {
+    const last = moments[moments.length - 1];
+    if (last && Math.abs(last[0].t - note.t) < EPS) last.push(note);
+    else moments.push([note]);
+  }
+
+  /* --- メインループ: 時刻順のグループ（単音 or 和音）を割り当てる --- */
+  for (const moment of moments) {
+    // 和音（同時刻2音以上）はまず「保持キャッチ和音」（1手で2音）を試す。
+    // seed>0では確率的にスキップして、乱択リスタートが和音有無の両方を探索できるようにする。
+    const tryChord = moment.length >= 2 && (seed === 0 || rnd() > 0.1);
+    if (tryChord) {
+      let bestPair = null;
+      for (let i = 0; i < moment.length; i++) {
+        for (let j = i + 1; j < moment.length; j++) {
+          const cp = planChordPair(moment[i], moment[j]);
+          if (cp && (!bestPair || cp.cost < bestPair.cost)) bestPair = cp;
+        }
+      }
+      if (bestPair) {
+        applyChordPlan(bestPair);
+        for (const note of moment) {
+          if (note !== bestPair.heldNote && note !== bestPair.newNote) scheduleNoteIndependently(note);
+        }
+        continue;
+      }
+    }
+    for (const note of moment) scheduleNoteIndependently(note);
   }
 
   actions.sort((a, b) => a.t - b.t);
@@ -698,7 +866,9 @@ TOREI.actionText = function (result, melody, cfg) {
     if (a.type === "pickup") lines.push(`${m}  ${who}: ${ring.label} を${a.from === "waki" ? "脇から取る" : "スタンドから取る"}`);
     if (a.type === "store") lines.push(`${m}  ${who}: ${ring.label} を${a.to === "waki" ? "脇に挟む" : a.to === "otherhand" ? "逆の手へ持ち替える" : "スタンドに掛ける"}`);
     if (a.type === "throw") lines.push(`${m}  ${who}: ${ring.label} を投げる（滞空 ${a.flight.toFixed(1)}秒${a.pass ? `・${TOREI.perfName(a.catchPerf)}へパス` : a.catchHand !== a.hand ? "・逆の手で受ける" : ""}）`);
-    if (a.type === "catch") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`);
+    if (a.type === "catch" && a.chordRole === "held") lines.push(`${m}  ${who}: 持っていた${ring.label}も一緒に鳴る → ♪${TOREI.noteName(a.midi)}（保持キャッチ和音）`);
+    else if (a.type === "catch" && a.chordRole === "new") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}（和音：この手が持っていたリングも同時に鳴る）`);
+    else if (a.type === "catch") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`);
     if (a.type === "shake") lines.push(`${m}  ${who}: ${ring.label} を振って鳴らす → ♪${TOREI.noteName(a.midi)} ※投げが間に合わない箇所`);
   }
   return lines.join("\n");

@@ -86,15 +86,34 @@ TOREI.timeline = (() => {
       }
 
       if (a.type === "catch") {
+        // 保持キャッチ和音: 同じ(演者,手,時刻)に2つの音が重なるため、上下にずらして
+        // 「1つの手で2音」が見えるようにする（held=元々持っていた・new=今キャッチした）。
         const x = toX(a.t);
-        ctx.fillStyle = color;
+        const yy = a.chordRole === "held" ? y - 4.5 : a.chordRole === "new" ? y + 4.5 : y;
         ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(x, yy, 5, 0, Math.PI * 2);
+        if (a.chordRole === "held") {
+          // 既に持っていたリング: 中抜きの丸（新しく飛んできたのではないことを示す）
+          ctx.fillStyle = "#f8f5ee";
+          ctx.fill();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+        if (a.chordRole) {
+          ctx.strokeStyle = "rgba(44,49,58,0.3)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x - 6, y - 4.5); ctx.lineTo(x - 6, y + 4.5);
+          ctx.stroke();
+        }
         ctx.font = "600 10px 'Hiragino Sans', sans-serif";
         ctx.textAlign = "center";
         ctx.fillStyle = "rgba(44,49,58,0.9)";
-        ctx.fillText(TOREI.noteName(a.midi), x, y - 9);
+        ctx.fillText(TOREI.noteName(a.midi), x, yy - 8);
         ctx.textAlign = "left";
       }
 
