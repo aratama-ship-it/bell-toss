@@ -19,6 +19,7 @@
   let playT0 = 0;     // シミュレーション上の開始時刻
   let rafId = null;
   let navRaf = 0;
+  let hlEls = [];      // 行動表の「今どの行動が進行中か」ハイライト（演者×手の数だけ）
 
   const $ = (id) => document.getElementById(id);
   const spb = () => 60 / state.melody.bpm;
@@ -57,7 +58,9 @@
     TOREI.stage.render(state.pos);
     renderSummary();
     renderWarnings();
+    buildHighlightEls();
     updatePlayheadEl();
+    updateActionHighlight();
     updateReadout();
     updateZoomUI();
     scheduleNavDraw();
@@ -69,7 +72,63 @@
     TOREI.timeline.draw(state);
     TOREI.nav.drawRuler();
     updatePlayheadEl();
+    updateActionHighlight();
     scheduleNavDraw();
+  }
+
+  // 行動表の「今どの行動が進行中か」ハイライト。演者×手の数だけDOM要素を作っておき、
+  // 毎フレームは位置(left/top)だけを書き換える——幅6000px超にもなる行動表Canvasを
+  // 毎フレーム全体再描画するコストを避けるため（design-system.md 項目8）。
+  function buildHighlightEls() {
+    for (const item of hlEls) item.el.remove();
+    hlEls = [];
+    const sa = $("scroll-area");
+    for (let p = 0; p < state.cfg.nPerformers; p++) {
+      for (let h = 0; h < 2; h++) {
+        const el = document.createElement("div");
+        el.className = "action-hl";
+        sa.appendChild(el);
+        hlEls.push({ el, perf: p, hand: h });
+      }
+    }
+  }
+
+  // 演者pの手hについて、時刻pos（シミュレーション秒）に進行中の全アクションを探す。
+  // 保持キャッチ和音は同じ(演者,手,時刻)に2件（held/new）重なるため配列で返す。
+  // dur:0（和音の相方）は一瞬すぎて見えないので、表示用に最小幅を与える。
+  function activeActions(perf, hand, pos) {
+    const acts = state.result ? state.result.actions : [];
+    const found = [];
+    for (const a of acts) {
+      if (a.perf !== perf || a.hand !== hand) continue;
+      const dur = Math.max(a.dur || 0, 0.12);
+      if (pos >= a.t - 1e-6 && pos <= a.t + dur + 1e-6) found.push(a);
+    }
+    return found;
+  }
+
+  function updateActionHighlight() {
+    if (!state.result) return;
+    const timelineTop = TOREI.nav.RULER_H + V.prHeight + 2;
+    const sp = spb();
+    for (const { el, perf, hand } of hlEls) {
+      const acts = activeActions(perf, hand, state.pos);
+      if (!acts.length) { el.style.display = "none"; continue; }
+      // 複数（和音）のときは矩形の和集合を1つのハイライトとして囲む
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+      for (const a of acts) {
+        const box = TOREI.timeline.layoutAction(a, sp);
+        if (!box) continue;
+        x1 = Math.min(x1, box.x); y1 = Math.min(y1, box.y);
+        x2 = Math.max(x2, box.x + box.w); y2 = Math.max(y2, box.y + box.h);
+      }
+      if (x1 === Infinity) { el.style.display = "none"; continue; }
+      el.style.display = "block";
+      el.style.left = x1 + "px";
+      el.style.top = (timelineTop + perf * TOREI.timeline.BAND_H + y1) + "px";
+      el.style.width = (x2 - x1) + "px";
+      el.style.height = (y2 - y1) + "px";
+    }
   }
 
   function scheduleNavDraw() {
@@ -217,6 +276,7 @@
       state.pos = pos;
       TOREI.stage.render(pos);
       updatePlayheadEl();
+      updateActionHighlight();
       updateReadout();
       scheduleNavDraw();
       const x = V.x(pos / spb());
@@ -251,6 +311,7 @@
     clampPos();
     if (state.result) TOREI.stage.render(state.pos);
     updatePlayheadEl();
+    updateActionHighlight();
     updateReadout();
     scheduleNavDraw();
     const sa = $("scroll-area");

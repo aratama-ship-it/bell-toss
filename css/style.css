@@ -271,6 +271,17 @@ button:focus-visible, input:focus-visible {
   background: var(--brass);
   pointer-events: none;
 }
+/* 行動表: 再生位置で「今どの行動が進行中か」を演者レーンごとに示すハイライト。
+   毎フレームの全幅Canvas再描画を避けるため、Canvasではなく小さなDOM要素を動かす。 */
+.action-hl {
+  position: absolute;
+  border: 1.6px solid var(--brass);
+  background: rgba(169, 130, 47, 0.16);
+  border-radius: 4px;
+  pointer-events: none;
+  display: none;
+}
+
 /* ルーラー上の三角マーカー（プレイヘッドと一体で動く） */
 #playhead::before {
   content: "";

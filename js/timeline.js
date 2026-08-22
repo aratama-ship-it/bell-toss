@@ -10,6 +10,32 @@ TOREI.timeline = (() => {
 
   function height(n) { return n * BAND_H; }
 
+  // 和音のキャッチ点は同じ(演者,手,時刻)に2つ乗るので上下にずらす（drawとlayoutActionで共有）
+  function catchLaneY(a) {
+    const y = LANE_Y[a.hand];
+    return a.chordRole === "held" ? y - 4.5 : a.chordRole === "new" ? y + 4.5 : y;
+  }
+
+  // 再生位置ハイライト用: 1アクションの見た目上の矩形を返す（バンド内ローカル座標、y=0がバンド上端）。
+  // main.jsが「今どのアクションが進行中か」を判定し、この矩形をDOM要素の位置に反映する。
+  function layoutAction(a, spb) {
+    const toX = (tSec) => V.x(tSec / spb);
+    if (a.type === "throw") {
+      const x = toX(a.t);
+      return { x: x - 8, y: LANE_Y[a.hand] - 8, w: 16, h: 16 };
+    }
+    if (a.type === "catch" || a.type === "shake") {
+      const x = toX(a.t);
+      const y = a.type === "catch" ? catchLaneY(a) : LANE_Y[a.hand];
+      return { x: x - 8, y: y - 8, w: 16, h: 16 };
+    }
+    if (a.type === "pickup" || a.type === "store") {
+      const x1 = toX(a.t), x2 = toX(a.t + a.dur);
+      return { x: x1 - 3, y: LANE_Y[a.hand] - 9, w: Math.max(6, x2 - x1) + 6, h: 18 };
+    }
+    return null;
+  }
+
   function draw(state) {
     const canvas = document.getElementById("timeline");
     const n = state.cfg.nPerformers;
@@ -89,7 +115,7 @@ TOREI.timeline = (() => {
         // 保持キャッチ和音: 同じ(演者,手,時刻)に2つの音が重なるため、上下にずらして
         // 「1つの手で2音」が見えるようにする（held=元々持っていた・new=今キャッチした）。
         const x = toX(a.t);
-        const yy = a.chordRole === "held" ? y - 4.5 : a.chordRole === "new" ? y + 4.5 : y;
+        const yy = catchLaneY(a);
         ctx.beginPath();
         ctx.arc(x, yy, 5, 0, Math.PI * 2);
         if (a.chordRole === "held") {
@@ -176,5 +202,5 @@ TOREI.timeline = (() => {
     }
   }
 
-  return { draw, buildGutter, BAND_H, height };
+  return { draw, buildGutter, BAND_H, LANE_Y, height, layoutAction };
 })();
