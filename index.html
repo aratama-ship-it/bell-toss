@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
 <header>
@@ -57,7 +57,8 @@
 
   <section id="score-area">
     <div id="score-toolbar">
-      <span id="pos-readout" title="現在位置（小節・拍 ／ 経過時間）">1小節 1拍　0:00.0</span>
+      <span id="pos-readout" title="現在位置（小節・拍 ／ 経過時間）" aria-hidden="true">1小節 1拍　0:00.0</span>
+      <span id="pos-sr" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
       <span class="spacer"></span>
       <span class="zoom-group" title="ズーム（⌘＋ホイールでも）">
         <button id="btn-zoom-out" class="mini" aria-label="縮小">−</button>
@@ -80,7 +81,8 @@
       </div>
       <div id="scroll-area">
         <canvas id="ruler"></canvas>
-        <div id="ruler-hit" title="なぞって再生位置・option+ドラッグでループ範囲"></div>
+        <div id="ruler-hit" role="group" aria-label="再生位置のルーラー（option+ドラッグでループ範囲）"
+        title="なぞって再生位置・option+ドラッグでループ範囲"></div>
         <canvas id="pianoroll"></canvas>
         <canvas id="timeline"></canvas>
         <div id="playhead" hidden></div>
@@ -106,7 +108,7 @@
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
-<script src="js/stage.js"></script>
-<script src="js/main.js?v=3"></script>
+<script src="js/stage.js?v=2"></script>
+<script src="js/main.js?v=8"></script>
 </body>
 </html>

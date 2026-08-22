@@ -5,10 +5,17 @@
 TOREI.stage = (() => {
   let scene = null; // prepare() の結果
 
+  // 舞台の寸法はCSSが持つ（幅=親、高さ=#stage-wrap の --stage-h）。
+  // canvas自身の clientWidth/Height は setupCanvas が書いたインラインstyle＝
+  // 「前回描いたときの寸法」なので、ここで読むと縮小方向のリサイズを取りこぼす。
+  function stageBox() {
+    const wrap = document.getElementById("stage").parentElement;
+    const h = parseFloat(getComputedStyle(wrap).getPropertyValue("--stage-h"));
+    return { W: wrap.clientWidth, H: (h > 0 ? h : 360) };
+  }
+
   function prepare(state) {
-    const canvas = document.getElementById("stage");
-    const W = canvas.clientWidth || canvas.parentElement.clientWidth;
-    const H = canvas.clientHeight || 360;
+    const { W, H } = stageBox();
     const n = state.cfg.nPerformers;
     const floorY = H - 34;
     const handY = floorY - 74;
@@ -153,9 +160,8 @@ TOREI.stage = (() => {
   function render(t) {
     if (!scene) return;
     const canvas = document.getElementById("stage");
-    const W = canvas.parentElement.clientWidth;
-    const H = 360;
-    if (scene.W !== W) prepare(scene.state); // 幅が変わったら組み直し
+    const { W, H } = stageBox();
+    if (scene.W !== W || scene.H !== H) prepare(scene.state); // 寸法が変わったら組み直し
     const ctx = TOREI.pianoroll.setupCanvas(canvas, W, H);
     const { floorY, perfs, rings, effects } = scene;
 

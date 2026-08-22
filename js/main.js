@@ -161,7 +161,31 @@
     const tt = Math.max(0, t);
     const m = Math.floor(tt / 60);
     const s = (tt - m * 60).toFixed(1).padStart(4, "0");
-    el.textContent = `${posTxt}　${m}:${s}`;
+    const text = `${posTxt}　${m}:${s}`;
+    el.textContent = text;
+    if (!playing) {
+      const sr = $("pos-sr");
+      const ll = loopLabel();
+      if (sr) sr.textContent = ll ? `${text}　${ll}` : text;
+    }
+  }
+
+  function loopLabel() {
+    if (!state.loop) return "";
+    const bpb = state.melody.beatsPerBar || 4;
+    const fmt = (beat) => {
+      const bar = Math.floor(beat / bpb) + 1;
+      const bi = Math.floor(beat - (bar - 1) * bpb) + 1;
+      return `${bar}小節 ${bi}拍`;
+    };
+    return `ループ ${fmt(state.loop.a)} から ${fmt(state.loop.b)}`;
+  }
+
+  // 読み上げ専用領域への通知。再生中は位置表示が毎フレーム変わるので黙る。
+  function announce(text) {
+    if (playing) return;
+    const sr = $("pos-sr");
+    if (sr) sr.textContent = text;
   }
 
   function updateZoomUI() {
@@ -170,6 +194,7 @@
     sl.min = V.PPB_MIN;
     sl.max = V.maxPPB();
     sl.value = V.PPB;
+    sl.setAttribute("aria-valuetext", `1拍あたり${Math.round(V.PPB)}ピクセル`);
   }
 
   // 滞空時間から最高到達点を出す（h = g*t^2/8）。投げの現実味を確かめるための表示。
@@ -262,6 +287,7 @@
     state.pos = from;
     $("btn-play").textContent = "■ 停止";
     $("btn-play").classList.add("playing");
+    $("btn-play").setAttribute("aria-pressed", "true");
 
     const scroll = $("scroll-area");
     const endT = songEndT();
@@ -298,13 +324,25 @@
     if (playing) TOREI.audio.endSession();
     playing = false;
     const b = $("btn-play");
-    if (b) { b.textContent = "▶ 再生"; b.classList.remove("playing"); }
+    if (b) {
+      b.textContent = "▶ 再生";
+      b.classList.remove("playing");
+      b.setAttribute("aria-pressed", "false");
+    }
     // カーソルは消さない: 止めた場所が次の稽古の起点になる
     if (state.result) TOREI.stage.render(state.pos);
+    updateReadout();
     scheduleNavDraw();
   }
 
   /* ---------- シーク・ズーム・ループ ---------- */
+
+  // 曲頭（＝停止中のカーソル位置）が必ず見えるところまで横スクロールする。
+  // 準備ゾーンは曲によって6〜27拍と幅があり、0にすると曲頭が右の画面外に出る。
+  function scrollToSongHead() {
+    const sa = $("scroll-area");
+    sa.scrollLeft = Math.max(0, V.x(0) - 48);
+  }
 
   function seek(t, opts) {
     state.pos = t;
@@ -345,11 +383,19 @@
   }
 
   function setLoop(l) {
+    const had = !!state.loop;   // 曲切替のたびに「ループ解除」と読み上げないため
     state.loop = l;
     $("btn-loop-clear").hidden = !l;
     $("btn-loop-bar").classList.toggle("active", !!l);
+    const hit = $("ruler-hit");
+    if (hit) {
+      hit.setAttribute("aria-label",
+        l ? loopLabel() : "再生位置のルーラー（option+ドラッグでループ範囲）");
+    }
     TOREI.nav.drawRuler();
     scheduleNavDraw();
+    updateReadout();                       // 読み上げ領域にループ範囲を反映
+    if (had && !l) announce("ループ解除");  // 解除は位置表示だけでは伝わらない
     if (playing) {
       const from = l && (state.pos < l.a * spb() || state.pos >= l.b * spb())
         ? l.a * spb() : state.pos;
@@ -531,6 +577,7 @@
         state.pos = 0;
         setLoop(null);
         recompute(); // 楽譜の幅は recompute が曲の長さから決める
+        scrollToSongHead();
         const msg = `${file.name} を読み込みました（${m.notes.length}音 / ${state.melody.bpm}BPM）`
           + (over ? ` ※音域外の${over}音をオクターブ移動しました` : "");
         showNotice(msg);
@@ -584,7 +631,7 @@
     state.pos = 0;
     setLoop(null);
     recompute();
-    $("scroll-area").scrollLeft = 0;
+    scrollToSongHead();
   }
 
   /* ---------- キーボード ---------- */
@@ -700,10 +747,20 @@
     sa.addEventListener("scroll", scheduleNavDraw, { passive: true });
     sa.addEventListener("wheel", (ev) => {
       // ⌘/Ctrl+ホイール（トラックパッドのピンチ含む）= ポインタ位置基準のズーム
-      if (!(ev.ctrlKey || ev.metaKey)) return;
-      ev.preventDefault();
-      const rect = sa.getBoundingClientRect();
-      zoomTo(V.PPB * Math.pow(1.0015, -ev.deltaY), ev.clientX - rect.left);
+      if (ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        const rect = sa.getBoundingClientRect();
+        zoomTo(V.PPB * Math.pow(1.0015, -ev.deltaY), ev.clientX - rect.left);
+        return;
+      }
+      // Shift+ホイール = 横パン。縦ホイールしかないマウスでも楽譜を送れるようにする
+      // （既定のままだとページ全体が縦に動いてしまい、楽譜は止まったままになる）
+      if (ev.shiftKey) {
+        const d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+        if (!d) return;
+        ev.preventDefault();
+        sa.scrollLeft += d;
+      }
     }, { passive: false });
 
     let panDrag = null;
