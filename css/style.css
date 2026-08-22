@@ -221,6 +221,19 @@ button:focus-visible, input:focus-visible {
 }
 #ruler { display: block; touch-action: none; cursor: col-resize; }
 
+/* ルーラーの見た目は22pxのまま、操作の当たり判定だけ44px（design-system.md「44 CSS
+   pixels以上」）へ広げる透明レイヤー。幅はJS側でルーラーと同じ値を都度セットする。
+   #scroll-areaはoverflow-y:hiddenなので上にははみ出せず、下（楽譜側）へだけ拡張する
+   （最高音の行の上端に少し重なるが、その境界ではルーラー操作を優先する設計）。 */
+#ruler-hit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 44px;
+  touch-action: none;
+  cursor: col-resize;
+}
+
 .score-row { display: flex; border: 1px solid var(--line); border-radius: 3px; background: #fbf9f4; }
 
 .gutter-col {

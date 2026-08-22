@@ -41,6 +41,8 @@ TOREI.nav = (() => {
   function drawRuler() {
     const canvas = document.getElementById("ruler");
     const ctx = TOREI.pianoroll.setupCanvas(canvas, V.width, RULER_H);
+    // 見た目のルーラーとタッチ判定レイヤー(#ruler-hit)の幅を揃える（拡大・曲変更のたび）
+    document.getElementById("ruler-hit").style.width = V.width + "px";
     const bpb = S.melody.beatsPerBar || 4;
 
     ctx.fillStyle = "#f1ede2";
@@ -200,7 +202,9 @@ TOREI.nav = (() => {
   }
 
   function wireRuler() {
-    const ruler = document.getElementById("ruler");
+    // 実際にイベントを受けるのは#ruler-hit（見た目22px・当たり判定44pxの透明レイヤー）。
+    // 左端が#rulerと揃っているためoffsetXはそのまま同じ座標系で使える。
+    const ruler = document.getElementById("ruler-hit");
 
     ruler.addEventListener("pointerdown", (ev) => {
       const beat = clampBeat(V.beatAt(ev.offsetX));
