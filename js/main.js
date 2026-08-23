@@ -70,11 +70,90 @@
     renderSummary();
     renderWarnings();
     buildHighlightEls();
+    buildCueSheet();
     updatePlayheadEl();
     updateActionHighlight();
     updateReadout();
     updateZoomUI();
     scheduleNavDraw();
+  }
+
+  /* ---------- Qシート（演者ごとの手順。2026-08-23） ----------
+     演者1人分の行動だけを時刻順の表にする。稽古で「自分は何をするか」を覚えるための
+     インターフェース。再生中は今の行を追いかけてスクロールする。
+     データは TOREI.cueSheet（scheduler側）が作り、ここは表にするだけ。 */
+  let cuePerf = 0;       // いま表示している演者
+  let cueRows = [];      // {t, until, tr} 再生ハイライト用
+  let cueLastIdx = -1;
+
+  function buildCueSheet() {
+    const tabs = $("cuesheet-tabs");
+    const body = $("cuesheet-body");
+    if (!tabs || !body) return;
+    if (cuePerf >= state.cfg.nPerformers) cuePerf = 0;
+    // タブ（演者名は編集可能なので毎回作り直す）
+    tabs.innerHTML = "";
+    for (let i = 0; i < state.cfg.nPerformers; i++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cue-tab";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(i === cuePerf));
+      b.textContent = TOREI.perfName(i);
+      b.addEventListener("click", () => { cuePerf = i; buildCueSheet(); });
+      tabs.appendChild(b);
+    }
+    // 本体
+    cueRows = [];
+    cueLastIdx = -1;
+    if (!state.result) { body.innerHTML = ""; return; }
+    const rows = TOREI.cueSheet(state.result, state.melody, state.cfg, cuePerf);
+    const table = document.createElement("table");
+    table.className = "cue-table";
+    table.innerHTML = "<thead><tr><th>小節</th><th>時刻</th><th>手</th><th>すること</th></tr></thead>";
+    const tbody = document.createElement("tbody");
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      if (r.t < 0) tr.className = "cue-prep";
+      if (r.kind === "catch") tr.classList.add("cue-catch");
+      const td = (cls, text) => {
+        const el = document.createElement("td");
+        el.className = cls;
+        el.textContent = text;
+        tr.appendChild(el);
+      };
+      td("cue-bar", r.bar || "準備");
+      td("cue-time", r.label);
+      td("cue-hand", r.hand);
+      td("cue-text", r.text);
+      tbody.appendChild(tr);
+      cueRows.push({ t: r.t, until: Math.max(r.until, r.t + 0.4), tr });
+    }
+    table.appendChild(tbody);
+    body.innerHTML = "";
+    body.appendChild(table);
+    updateCueHighlight();
+  }
+
+  // 再生位置の行を強調し、視界に持ってくる（毎フレーム呼ばれるので差分だけ触る）
+  function updateCueHighlight() {
+    if (!cueRows.length) return;
+    const t = state.pos;
+    // 「今まさに実行中」の行。無ければ直近に過ぎた行を光らせておく（次の行の予告より
+    // 「いま何をしているか」を優先する）
+    let idx = -1;
+    for (let i = 0; i < cueRows.length; i++) {
+      if (cueRows[i].t > t + 1e-6) break;
+      idx = i;
+    }
+    if (idx === cueLastIdx) return;
+    if (cueLastIdx >= 0) cueRows[cueLastIdx].tr.classList.remove("cue-now");
+    cueLastIdx = idx;
+    if (idx >= 0) {
+      const tr = cueRows[idx].tr;
+      tr.classList.add("cue-now");
+      if (playing) tr.scrollIntoView({ block: "center", behavior: "instant" });
+    }
   }
 
   // ズーム変更時: スケジュール計算は変わらないので楽譜側だけ描き直す
@@ -363,6 +442,7 @@
       TOREI.stage.render(pos);
       updatePlayheadEl();
       updateActionHighlight();
+      updateCueHighlight();
       updateReadout();
       scheduleNavDraw();
       const x = V.x(pos / spb());
@@ -410,6 +490,7 @@
     if (state.result) TOREI.stage.render(state.pos);
     updatePlayheadEl();
     updateActionHighlight();
+    updateCueHighlight();
     updateReadout();
     scheduleNavDraw();
     const sa = $("scroll-area");
@@ -1028,6 +1109,14 @@
     });
 
     updateFlightHeight();
+    // URLで曲を指定できる（?song=bunbun）。クライアントに「この曲をセットした状態」で
+    // リンクを送るための入口。指定があれば自動保存の復元より優先する
+    const wanted = new URLSearchParams(location.search).get("song");
+    if (wanted && [...sel.options].some(o => o.value === wanted)) {
+      sel.value = wanted;   // loadPresetはセレクタ表示を触らない（change経由の設計）ので明示する
+      loadPreset(wanted);
+      return;
+    }
     const saved = TOREI.songfile.load();
     if (saved && !TOREI.songfile.validate(saved)) {
       applySongData(saved);

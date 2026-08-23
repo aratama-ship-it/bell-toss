@@ -908,6 +908,46 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 };
 
 /* 行動表テキスト（練習用）を生成 */
+/* Qシート: 1人の演者の手順だけを時刻順に抜き出す（稽古で自分のパートを覚えるための表）。
+   文言は actionText と揃える。UI側（main.js）はこの配列を表にするだけ。
+   行: { t, label(時刻表示), bar(小節.拍 or 準備), hand, text, kind, until } */
+TOREI.cueSheet = function (result, melody, cfg, perfId) {
+  const handName = ["左手", "右手"];
+  const spb = 60 / melody.bpm;
+  const bpb = melody.beatsPerBar || 4;
+  const rows = [];
+  for (const a of result.actions) {
+    // キャッチは受け手の行動。投げは投げ手の行動。両者が別人ならそれぞれの側にだけ出す
+    if (a.perf !== perfId) continue;
+    const ring = result.rings[a.ring];
+    const hand = handName[a.hand];
+    let text = null, kind = a.type;
+    if (a.type === "pickup") text = `${ring.label} を${a.from === "waki" ? "脇から取る" : "スタンドから取る"}`;
+    else if (a.type === "store") text = `${ring.label} を${a.to === "waki" ? "脇に挟む" : a.to === "otherhand" ? "逆の手へ持ち替える" : "スタンドに掛ける"}`;
+    else if (a.type === "throw") {
+      const to = a.pass ? `${TOREI.perfName(a.catchPerf)}へパス`
+        : a.catchHand !== a.hand ? "自分の逆の手へ" : "自分へ";
+      text = `${ring.label} を投げる（高さ${TOREI.throwLevel(a.flight)}）→ ${to}`;
+    } else if (a.type === "catch") {
+      const from = a.pass ? `${TOREI.perfName(a.throwPerf)}から ` : "";
+      if (a.chordRole === "held") text = `持っていた${ring.label}も一緒に鳴る → ♪${TOREI.noteName(a.midi)}（和音）`;
+      else if (a.chordRole === "new") text = `${from}${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}（和音）`;
+      else text = `${from}${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`;
+    } else if (a.type === "shake") text = `${ring.label} を振って鳴らす → ♪${TOREI.noteName(a.midi)}`;
+    if (!text) continue;
+    const t = a.t;
+    const label = t < 0 ? "準備" : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+    let bar = "";
+    if (t >= -1e-6) {
+      const beat = t / spb;
+      bar = `${Math.floor(beat / bpb) + 1}小節${(Math.floor(beat) % bpb) + 1}拍`;
+    }
+    rows.push({ t, until: t + (a.dur || 0), label, bar, hand, text, kind });
+  }
+  rows.sort((x, y) => x.t - y.t);
+  return rows;
+};
+
 TOREI.actionText = function (result, melody, cfg) {
   const lines = [];
   lines.push(`投鈴 行動表  (テンポ ${melody.bpm} BPM / 演者 ${cfg.nPerformers}人 / 基本の投げ 高さ${TOREI.throwLevel(cfg.flight)}＝滞空${cfg.flight}秒)`);

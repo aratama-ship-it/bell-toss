@@ -365,6 +365,37 @@ button:focus-visible, input:focus-visible {
 
 .hint { font-size: 11.5px; color: var(--ink-soft); padding: 8px 2px; }
 
+/* --- Qシート（演者ごとの手順） --- */
+#cuesheet { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+#cuesheet-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; }
+#cuesheet h2 {
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 17px; font-weight: 600; letter-spacing: 0.08em;
+}
+.cuesheet-sub { font-family: "Hiragino Sans", sans-serif; font-size: 11.5px;
+  color: var(--ink-soft); letter-spacing: normal; margin-left: 10px; font-weight: 400; }
+#cuesheet-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.cue-tab {
+  font: inherit; font-size: 12.5px; padding: 4px 14px;
+  border: 1px solid var(--ink-soft); border-radius: 2px;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.cue-tab[aria-selected="true"] { background: var(--perf, #3d5578); border-color: var(--perf, #3d5578); color: var(--paper); }
+#cuesheet-body { margin-top: 10px; max-height: 320px; overflow-y: auto;
+  border: 1px solid var(--line); background: var(--paper-canvas, #fbf9f4); }
+.cue-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cue-table th {
+  text-align: left; font-weight: 600; color: var(--ink-soft); font-size: 11px;
+  padding: 6px 10px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: #f1ede2; z-index: 1;
+}
+.cue-table td { padding: 4px 10px; border-bottom: 1px dashed var(--line); vertical-align: top; }
+.cue-table td.cue-time { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink-soft); }
+.cue-table td.cue-hand { white-space: nowrap; }
+.cue-table tr.cue-prep td { color: var(--ink-soft); background: rgba(169,130,47,0.05); }
+.cue-table tr.cue-now td { background: rgba(169,130,47,0.18); }
+.cue-table tr.cue-catch td.cue-text { font-weight: 600; }
+
 footer {
   border-top: 1px solid var(--line);
   padding: 16px 32px 28px;
