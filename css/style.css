@@ -101,6 +101,12 @@ main { padding: 0 32px 40px; max-width: 1280px; margin: 0 auto; }
 
 #transport .spacer { flex: 1; }
 
+/* 二次操作（MIDI・行動表コピー・曲データ）。#transport の直接の子として
+   gapによる間隔を保つため display:contents で自身は箱を作らない。
+   デスクトップでは常時展開・トグルボタンは非表示（従来の見た目のまま）。 */
+#transport-more { display: contents; }
+#btn-more-toggle { display: none; }
+
 button {
   font: inherit;
   font-size: 13px;
@@ -345,6 +351,11 @@ footer {
   #warnings     { order: 5; }
   #score-area   { order: 6; }
   #config       { order: 7; }
+
+  /* 狭い画面では二次操作（MIDI・行動表コピー・曲データ）を畳んで、楽譜が見える
+     量を優先する。「曲を保存」「曲を開く」の追加でこの必要性が上がった。 */
+  #btn-more-toggle { display: inline-flex; }
+  #transport-more:not(.open) > * { display: none; }
 }
 
 @media (pointer: coarse) {
@@ -352,7 +363,8 @@ footer {
   #btn-zoom-out,
   #btn-zoom-in,
   #btn-loop-bar,
-  #btn-loop-clear {
+  #btn-loop-clear,
+  #btn-more-toggle {
     min-height: 44px;
   }
 

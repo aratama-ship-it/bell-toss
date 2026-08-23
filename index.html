@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
 <header>
@@ -29,13 +29,16 @@
     </label>
     <button id="btn-clear">全消去</button>
     <span class="spacer"></span>
-    <button id="btn-load-midi">MIDI読み込み</button>
-    <input type="file" id="inp-midi-file" accept=".mid,.midi,audio/midi" hidden>
-    <button id="btn-midi">MIDI書き出し</button>
-    <button id="btn-copy">行動表をコピー</button>
-    <button id="btn-save-json" title="いまの音符と設定を1つのJSONファイルに書き出す（tools/analyze.mjs にそのまま渡せる）">曲を保存</button>
-    <button id="btn-open-json" title="書き出したJSONを読み込んで、音符と設定を丸ごと復元する">曲を開く</button>
-    <input type="file" id="inp-json-file" accept=".json,application/json" hidden>
+    <button id="btn-more-toggle" type="button" class="mini-wide" aria-expanded="false" aria-controls="transport-more">その他の操作 ▾</button>
+    <span id="transport-more">
+      <button id="btn-load-midi">MIDI読み込み</button>
+      <input type="file" id="inp-midi-file" accept=".mid,.midi,audio/midi" hidden>
+      <button id="btn-midi">MIDI書き出し</button>
+      <button id="btn-copy">行動表をコピー</button>
+      <button id="btn-save-json" title="いまの音符と設定を1つのJSONファイルに書き出す（tools/analyze.mjs にそのまま渡せる）">曲を保存</button>
+      <button id="btn-open-json" title="書き出したJSONを読み込んで、音符と設定を丸ごと復元する">曲を開く</button>
+      <input type="file" id="inp-json-file" accept=".json,application/json" hidden>
+    </span>
   </section>
 
   <section id="config">
@@ -113,6 +116,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=2"></script>
-<script src="js/main.js?v=9"></script>
+<script src="js/main.js?v=10"></script>
 </body>
 </html>

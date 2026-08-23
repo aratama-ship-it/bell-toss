@@ -774,6 +774,14 @@
     $("btn-open-json").addEventListener("click", () => $("inp-json-file").click());
     $("inp-json-file").addEventListener("change", onJsonFile);
 
+    // 狭い画面での二次操作の畳み込み（デスクトップではボタン自体が非表示なので無関係）
+    $("btn-more-toggle").addEventListener("click", () => {
+      const more = $("transport-more");
+      const open = more.classList.toggle("open");
+      $("btn-more-toggle").setAttribute("aria-expanded", String(open));
+      $("btn-more-toggle").textContent = open ? "操作を閉じる ▴" : "その他の操作 ▾";
+    });
+
     // ズームとループ
     $("btn-zoom-out").addEventListener("click", () => zoomTo(V.PPB / 1.3));
     $("btn-zoom-in").addEventListener("click", () => zoomTo(V.PPB * 1.3));

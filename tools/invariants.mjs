@@ -37,12 +37,21 @@ function check(song, seed) {
   for (const a of r.actions) if (!r.rings[a.ring] || r.rings[a.ring].id !== a.ring) bad.push(`ring参照 ${a.type}@${a.t}`);
 
   // 2) 手の同時保持: (perf,hand) ごとに、在手区間が重ならないこと
+  //
+  // 注意: 「取得完了時刻」(pickup.t + pickup.dur) と「直後の投げ時刻」(throw.t) は
+  // 数式上は一致するはずでも、浮動小数点演算では最下位ビットがずれることがある
+  // （実例: 2.9000000000000004 + 0.7 === 3.6000000000000005 ≠ 3.6）。
+  // これをそのままソートすると in/out の順序が入れ替わり、閉じるはずの区間が
+  // 開かないまま握りつぶされ、後続の別区間と誤って合体する（実際に踏んだ）。
+  // ROUND_NS 単位（1000分の1秒=1ms未満）に丸めて、真に同時刻のイベントを
+  // 確実に同値として扱う。
+  const ROUND = (t) => Math.round(t * 1e6) / 1e6;
   const ev = new Map();  // ring -> events
   for (const a of r.actions) {
     if (!ev.has(a.ring)) ev.set(a.ring, []);
-    if (a.type === "catch") ev.get(a.ring).push({t: a.t + T_CATCH, in: true, perf: a.perf, hand: a.hand, chord: !!a.chord});
-    else if (a.type === "pickup") ev.get(a.ring).push({t: a.t + (a.dur||0), in: true, perf: a.perf, hand: a.hand});
-    else if (a.type === "throw" || a.type === "store") ev.get(a.ring).push({t: a.t, in: false});
+    if (a.type === "catch") ev.get(a.ring).push({t: ROUND(a.t + T_CATCH), in: true, perf: a.perf, hand: a.hand, chord: !!a.chord});
+    else if (a.type === "pickup") ev.get(a.ring).push({t: ROUND(a.t + (a.dur||0)), in: true, perf: a.perf, hand: a.hand});
+    else if (a.type === "throw" || a.type === "store") ev.get(a.ring).push({t: ROUND(a.t), in: false});
   }
   const perHand = new Map();
   for (const [ring, list] of ev) {

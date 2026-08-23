@@ -83,13 +83,18 @@ function writtenChords(song) {
 // 切り分けるための近似。actions から各リングの在手区間を組み直す。
 // 手に入る: catch(+0.25秒) / pickup(+dur) ｜ 手から出る: throw / store
 function inHandIntervals(result) {
+  // ROUND: 取得完了時刻(pickup.t+dur)と直後の投げ時刻(throw.t)は数式上は一致するはずでも
+  // 浮動小数点では最下位ビットがずれることがある。丸めないと in/out の順序が入れ替わり、
+  // 閉じるはずの区間が握りつぶされて後続の別区間と誤って合体する
+  // （tools/invariants.mjs で実際に踏んだのと同じ罠。ここも同じ丸めを入れる）。
+  const ROUND = (t) => Math.round(t * 1e6) / 1e6;
   const byRing = new Map();
   for (const a of result.actions) {
     if (!byRing.has(a.ring)) byRing.set(a.ring, []);
     const ev = byRing.get(a.ring);
-    if (a.type === "catch") ev.push({ t: a.t + 0.25, in: true, perf: a.perf, hand: a.hand });
-    else if (a.type === "pickup") ev.push({ t: a.t + (a.dur || 0), in: true, perf: a.perf, hand: a.hand });
-    else if (a.type === "throw" || a.type === "store") ev.push({ t: a.t, in: false });
+    if (a.type === "catch") ev.push({ t: ROUND(a.t + 0.25), in: true, perf: a.perf, hand: a.hand });
+    else if (a.type === "pickup") ev.push({ t: ROUND(a.t + (a.dur || 0)), in: true, perf: a.perf, hand: a.hand });
+    else if (a.type === "throw" || a.type === "store") ev.push({ t: ROUND(a.t), in: false });
   }
   const out = new Map();
   for (const [ring, ev] of byRing) {
