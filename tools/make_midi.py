@@ -419,6 +419,34 @@ SONGS = [
             (44,69,4),(44,64,4),
         ],
     },
+    {
+        "id": "kasanesuzu",
+        "name": "重ね鈴（オリジナル・和音の稿）※3人",
+        "bpm": 66, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.3,
+        "desc": "保持キャッチ和音を先に置いてから旋律を書いた曲。ラドレミソの5音、1音2拍の遅い稿。"
+                "同時刻2音を6箇所書き、6箇所すべてが1手の和音として成立する"
+                "（tools/analyze.mjs で確認。既存曲は最多でも3箇所）。3人・66BPMでリング8本・パス70%。"
+                "和音は『手の中で休んでいるリング』を要求するので、リングを回し続けるパスとは競合する",
+        # 作り方: 和音の「持たれる側」の音高を、和音の4拍前に必ず鳴らしておく。
+        # そうするとそのリングが手に残ったまま和音の時刻を迎える（8拍以上空けると
+        # スケジューラーが脇へしまってしまい、和音の素材がなくなる）。
+        "notes": [
+            (0,76,2),(2,74,2),(4,72,2),(6,69,2),
+            (8,74,2),(10,76,2),(12,79,2),(14,72,2),
+            (16,76,2),(16,79,2),
+            (18,74,2),(20,69,2),(22,74,2),
+            (24,69,2),(24,76,2),
+            (26,72,2),(28,79,2),(30,76,2),
+            (32,72,2),(32,79,2),
+            (34,74,2),(36,69,2),(38,74,2),(40,76,2),
+            (42,74,2),(42,79,2),
+            (44,72,2),(46,79,2),
+            (48,72,2),(48,76,2),
+            (50,74,2),(52,69,2),(54,74,2),
+            (56,69,4),(56,72,4),(56,76,4),
+        ],
+    },
 ]
 
 
@@ -491,19 +519,30 @@ def check_song(song):
     """同音の再出現間隔と使用音高数を検証し、問題を文字列リストで返す。
     目安: 使用音高数 <= 人数x3（脇1本前提）／同音間隔は投げが成立する 2.4秒以上。"""
     spb = 60 / song["bpm"] * (1 if song["beatUnit"] == "quarter" else 0.5)
+    # 同時刻に2音以上ある拍。ここに載る音は「保持キャッチ和音」で鳴りうる＝投げ直しが
+    # 不要になる場合があるため、同音間隔の警告から外す（外さないと偽の警告が出る）。
+    from collections import Counter
+    chord_beats = {b for b, c in Counter(b for b, _, _ in song["notes"]).items() if c >= 2}
     last = {}
     tight = []
+    chord_exempt = 0
     for beat, midi, _ in sorted(song["notes"]):
         t = beat * spb
         if midi in last:
             gap = t - last[midi]
             if gap < 2.4:
-                tight.append((round(beat, 2), midi, round(gap, 2)))
+                if beat in chord_beats:
+                    chord_exempt += 1
+                else:
+                    tight.append((round(beat, 2), midi, round(gap, 2)))
         last[midi] = t
     issues = []
     pitches = len({m for _, m, _ in song["notes"]})
     if tight:
         issues.append(f"同音間隔が短い箇所 {len(tight)}件 (最小 {min(g for _, _, g in tight)}秒): {tight[:3]}")
+    if chord_exempt:
+        issues.append(f"同音間隔が短いが和音の拍なので除外 {chord_exempt}件"
+                      f"（保持キャッチ和音なら投げ直しが要らない。tools/analyze.mjs で成否を確認すること）")
     issues.append(f"使用音高 {pitches} → 必要人数の目安 {-(-pitches // 3)}人以上")
     return issues
 
