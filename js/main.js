@@ -206,10 +206,18 @@
   }
 
   // 滞空時間から最高到達点を出す（h = g*t^2/8）。投げの現実味を確かめるための表示。
+  // テンポはスライダー。つまみの位置と数値表示を必ず一緒に動かす
+  function setBpmUI(bpm) {
+    $("inp-bpm").value = bpm;
+    $("bpm-val").textContent = bpm;
+  }
+
   function updateFlightHeight() {
     const t = state.cfg.flight;
-    const h = 9.8 * t * t / 8;
-    $("flight-height").textContent = `（頭上 約${h.toFixed(1)}m ／ 床から 約${(h + 1.4).toFixed(1)}m）`;
+    const h = TOREI.throwHeightM(t);
+    // 稽古で声に出すのは秒数ではなく段階。「高さ4で」と言えるように段を主役にする
+    $("flight-height").textContent =
+      `＝ 高さ${TOREI.throwLevel(t)}（頭上 約${h.toFixed(1)}m ／ 床から 約${(h + 1.4).toFixed(1)}m）`;
   }
 
   function renderSummary() {
@@ -238,14 +246,42 @@
     el.innerHTML = `必要リング <b>${need}本</b> ${cap} ｜ ${parts.join(" ／ ")}`;
   }
 
+  // 警告は「読むもの」ではなく「飛ぶもの」。稽古中に破綻箇所を潰していく道具なので、
+  // 1行クリックでその瞬間へシークし、楽譜も画面内へ持ってくる。
   function renderWarnings() {
     const el = $("warnings");
     const ws = state.result ? state.result.warnings : [];
     if (!ws.length) { el.hidden = true; return; }
     el.hidden = false;
-    const rows = ws.slice(0, 8).map(w => `<div>⚠ ${w.msg}</div>`);
-    if (ws.length > 8) rows.push(`<div>…他 ${ws.length - 8} 件</div>`);
+    const esc = (t) => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const rows = ws.slice(0, 8).map((w, i) =>
+      `<button type="button" class="warn-jump" data-w="${i}" title="この箇所へ移動">⚠ ${esc(w.msg)}</button>`);
+    if (ws.length > 8) rows.push(`<div class="warn-more">…他 ${ws.length - 8} 件</div>`);
     el.innerHTML = rows.join("");
+    el.querySelectorAll(".warn-jump").forEach(btn => {
+      btn.addEventListener("click", () => jumpToWarning(ws[+btn.dataset.w]));
+    });
+  }
+
+  function jumpToWarning(w) {
+    if (!w) return;
+    stopPlayback();
+    seek(w.t, { center: true });          // その瞬間を楽譜の中央に置く
+    const area = $("score-area");
+    // 警告は楽譜より上（狭い画面では下）にあるので、楽譜自体を画面内へ運ぶ
+    const box = area.getBoundingClientRect();
+    if (box.top < 0 || box.top > window.innerHeight * 0.5) {
+      window.scrollTo({ top: box.top + window.scrollY - 12, behavior: "smooth" });
+    }
+    flashPlayhead();
+  }
+
+  // 飛んだ先が分かるように、プレイヘッドを一瞬強調する
+  function flashPlayhead() {
+    const ph = $("playhead");
+    ph.classList.remove("flash");
+    void ph.offsetWidth;   // アニメーションを再起動させるための強制リフロー
+    ph.classList.add("flash");
   }
 
   /* ---------- 再生 ---------- */
@@ -580,7 +616,7 @@
         }
         state.melody = { bpm: Math.max(30, Math.min(200, m.bpm)),
                          beatsPerBar: m.beatsPerBar, notes: m.notes };
-        $("inp-bpm").value = state.melody.bpm;
+        setBpmUI(state.melody.bpm);
         $("sel-preset").value = "blank";
         state.pos = 0;
         setLoop(null);
@@ -622,7 +658,7 @@
     state.cfg.standTime = data.standTime;
     state.cfg.passMode = data.passMode;
 
-    $("inp-bpm").value = data.bpm;
+    setBpmUI(data.bpm);
     $("inp-performers").value = data.performers;
     $("inp-flight").value = data.flight;
     $("flight-val").textContent = data.flight.toFixed(2);
@@ -685,7 +721,7 @@
       beatsPerBar: p.beatsPerBar,
       notes: p.notes.map(n => ({ beat: n.beat, midi: n.midi })),
     };
-    $("inp-bpm").value = p.bpm;
+    setBpmUI(p.bpm);
     // 曲ごとの推奨設定（検証済みの成立条件）を自動で当てる
     if (p.performers) {
       state.cfg.nPerformers = p.performers;
@@ -789,8 +825,9 @@
     $("btn-loop-bar").addEventListener("click", loopCurrentBar);
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
 
-    $("inp-bpm").addEventListener("change", () => {
-      state.melody.bpm = Math.max(40, Math.min(200, +$("inp-bpm").value || 90));
+    $("inp-bpm").addEventListener("input", () => {
+      state.melody.bpm = Math.max(30, Math.min(200, +$("inp-bpm").value || 90));
+      $("bpm-val").textContent = state.melody.bpm;
       recompute();
     });
     $("inp-performers").addEventListener("change", () => {

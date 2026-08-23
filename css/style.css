@@ -133,6 +133,15 @@ button.primary:hover, button.primary.playing {
 }
 
 label { color: var(--ink-soft); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+/* テンポのつまみ。数値は等幅にして、動かしても隣の「BPM」が揺れないようにする */
+label.tempo input[type="range"] { width: 130px; }
+#bpm-val {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
 label.check { cursor: pointer; }
 
 input[type="number"], select {
@@ -181,6 +190,27 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
   border-radius: 0 2px 2px 0;
 }
 #warnings div { margin: 1px 0; }
+
+/* 警告は1行ずつクリックしてその箇所へ飛べる。ボタンだが「文章の行」に見せたいので、
+   共通の button スタイル（枠・中央寄せ）を打ち消して左揃えの行に戻す。 */
+.warn-jump {
+  display: block;
+  width: 100%;
+  margin: 1px 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: normal;
+  text-align: left;
+  cursor: pointer;
+}
+.warn-jump:hover { background: rgba(178, 71, 46, 0.12); color: inherit; }
+.warn-jump:focus-visible { outline: 2px solid var(--warn); outline-offset: -1px; }
+.warn-more { margin: 1px 0; padding: 2px 4px; }
 
 /* --- 楽譜と行動表 --- */
 #score-area { margin-top: 6px; }
@@ -316,6 +346,13 @@ button:focus-visible, input:focus-visible {
 }
 
 /* ルーラー上の三角マーカー（プレイヘッドと一体で動く） */
+/* 警告から飛んだ直後、どこに来たのかを一瞬だけ強く示す */
+#playhead.flash { animation: playhead-flash 0.9s ease-out 1; }
+@keyframes playhead-flash {
+  0%   { box-shadow: 0 0 0 3px rgba(169, 130, 47, 0.55); background: var(--warn); }
+  100% { box-shadow: 0 0 0 0 rgba(169, 130, 47, 0);      background: var(--brass); }
+}
+
 #playhead::before {
   content: "";
   position: absolute;
@@ -368,5 +405,6 @@ footer {
     min-height: 44px;
   }
 
-  #inp-zoom { height: 44px; }
+  /* スライダーは見た目の線が細くても、つまみを掴める高さを確保する */
+  #inp-zoom, #inp-bpm, #inp-flight { height: 44px; }
 }

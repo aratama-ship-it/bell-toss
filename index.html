@@ -4,13 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=8">
 </head>
 <body>
 <header>
   <div class="title-block">
     <h1>投鈴<span class="reading">とうれい</span></h1>
-    <p class="tagline">投げてから、鳴るまで。</p>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -23,7 +22,10 @@
 
   <section id="transport">
     <button id="btn-play" class="primary">▶ 再生</button>
-    <label>テンポ <input type="number" id="inp-bpm" min="40" max="200" value="90" step="2"> BPM</label>
+    <label class="tempo">テンポ
+      <input type="range" id="inp-bpm" min="30" max="200" step="1" value="90"
+        aria-label="テンポ（BPM）">
+      <span id="bpm-val">90</span> BPM</label>
     <label>曲
       <select id="sel-preset"></select>
     </label>
@@ -54,7 +56,7 @@
         <option value="off">なし</option>
       </select></label>
     <label>同音リング最大 <input type="number" id="inp-dup" min="1" max="3" value="2"> 本</label>
-    <label class="check"><input type="checkbox" id="inp-shake" checked> 間に合わない音は手元で振って鳴らす</label>
+    <label class="check"><input type="checkbox" id="inp-shake" checked> 間に合わない音はフレーズ末でのみ振って鳴らす</label>
   </section>
 
   <div id="ring-summary"></div>
@@ -106,16 +108,16 @@
   参考: 空転軌道のハンドベル・ジャグリング演技（本ツールは非公式の自作シミュレーターです）</p>
 </footer>
 
-<script src="js/presets.js?v=2"></script>
+<script src="js/presets.js?v=3"></script>
 <script src="js/songfile.js?v=1"></script>
 <script src="js/songs.js?v=18"></script>
-<script src="js/scheduler.js"></script>
+<script src="js/scheduler.js?v=2"></script>
 <script src="js/audio.js"></script>
 <script src="js/midi.js"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=2"></script>
-<script src="js/main.js?v=10"></script>
+<script src="js/main.js?v=11"></script>
 </body>
 </html>

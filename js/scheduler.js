@@ -72,6 +72,33 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     .map((n, i) => ({ t: n.beat * spb, beat: n.beat, midi: n.midi, idx: i }))
     .sort((a, b) => a.t - b.t || a.midi - b.midi);
 
+  /* --- フレーズ末の判定（2026-08-23 本人方針）---
+     振り（手元で鳴らす）はジャグリング要素がないので多用させない。
+     フレーズの末尾なら「余韻を鳴らす所作」として演出上成立するので、そこだけ許す。
+
+     フレーズ末 = 次の打点までが「直前までの音の流れの2倍以上」かつ「3拍以上」空く音、
+     および曲の最後の音。両方を課すのは、片方だけだと不安定なため:
+       ・倍率だけだと、音が詰まった速い曲でわずかな隙間まで拾ってしまう
+       ・拍数だけだと、もともとゆったりした曲では全部の音がフレーズ末になる
+     実測（全19曲）で1曲あたり1〜9箇所に収まることを確認した閾値。 */
+  const onsets = [...new Set(notes.map(n => n.beat))].sort((a, b) => a - b);
+  const gapsB = [];
+  for (let i = 1; i < onsets.length; i++) gapsB.push(onsets[i] - onsets[i - 1]);
+  const medGap = gapsB.length
+    ? gapsB.slice().sort((a, b) => a - b)[Math.floor(gapsB.length / 2)] : 0;
+  const phraseEndBeats = new Set();
+  for (let i = 0; i < onsets.length; i++) {
+    if (i === onsets.length - 1) { phraseEndBeats.add(onsets[i]); continue; }
+    const g = onsets[i + 1] - onsets[i];
+    if (g >= medGap * 2 - EPS && g >= 3 - EPS) phraseEndBeats.add(onsets[i]);
+  }
+  const isPhraseEnd = (note) => phraseEndBeats.has(note.beat);
+
+  // 振りの総数の上限。フレーズ末に限っても連発すればジャグリングでなくなるため、
+  // フレーズ末の数の1/4（最低1）までとする。超えた分は成立させず警告に出す。
+  const shakeCap = Math.max(1, Math.ceil(phraseEndBeats.size / 4));
+  let shakeCount = 0;
+
   const perfs = [];
   for (let i = 0; i < cfg.nPerformers; i++) {
     perfs.push({
@@ -491,8 +518,12 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     return best;
   }
 
-  function planShake(ring, perf, handIdx, t, isNew) {
+  function planShake(ring, perf, handIdx, note, isNew) {
+    const t = note.t;
     if (!cfg.allowShake) return null;
+    // 振りはフレーズ末だけ。かつ曲全体で shakeCap 本まで（2026-08-23 本人方針）
+    if (!isPhraseEnd(note)) return null;
+    if (shakeCount >= shakeCap) return null;
     if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
     if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
 
@@ -633,8 +664,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       }
       ring.readyAt = t + C.T_SHAKE;
       noteResults[note.idx] = { kind: "shake", perf: perf.id, hand: plan.handIdx, ring: ring.id };
+      shakeCount++;  // 上限（shakeCap）の判定に使う
       warnings.push({ noteIdx: note.idx, t, midi: note.midi,
-        msg: `${fmtTime(t)} の ${TOREI.noteName(note.midi)}: 投げが間に合わず、${TOREI.perfName(perf.id)}が手元で振って鳴らします` });
+        msg: `${fmtTime(t)} の ${TOREI.noteName(note.midi)}: 投げが間に合わず、${TOREI.perfName(perf.id)}がフレーズ末で振って鳴らします（${shakeCount}/${shakeCap}本目）` });
     }
     holdPerf.load++;
 
@@ -757,7 +789,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         if (ring.midi !== note.midi) continue;
         const perf = perfs[ring.owner];
         for (let h = 0; h < 2; h++) {
-          const p = planShake(ring, perf, h, note.t, false);
+          const p = planShake(ring, perf, h, note, false);
           if (p) candidates.push(p);
         }
       }
@@ -765,7 +797,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         for (const perf of perfs) {
           for (let h = 0; h < 2; h++) {
             const ghost = { id: -1, midi: note.midi, owner: perf.id, loc: "stand", readyAt: C.PREP, hand: null };
-            const p = planShake(ghost, perf, h, note.t, true);
+            const p = planShake(ghost, perf, h, note, true);
             if (p) candidates.push(p);
           }
         }
@@ -776,8 +808,15 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     const best = candidates.sort((a, b) => a.k - b.k)[0] || null;
 
     if (!best) {
+      // 振りが使えなかった理由が「フレーズ末ではない」「上限に達した」なら、それを言う。
+      // 単に「間に合いません」だけだと、振りをONにしているのになぜ出ないのか分からない。
+      let why = "";
+      if (cfg.allowShake) {
+        if (!isPhraseEnd(note)) why = "。フレーズ末ではないので振りでの代用は使えません";
+        else if (shakeCount >= shakeCap) why = `。振りは既に上限${shakeCap}本に達しています`;
+      }
       warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
-        msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: どの演者も間に合いません（演者を増やす／テンポを落とす／滞空を短くする）` });
+        msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: どの演者も間に合いません（演者を増やす／テンポを落とす／滞空を短くする）${why}` });
       noteResults[note.idx] = { kind: "fail" };
       return;
     }
@@ -846,7 +885,8 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 /* 行動表テキスト（練習用）を生成 */
 TOREI.actionText = function (result, melody, cfg) {
   const lines = [];
-  lines.push(`投鈴 行動表  (テンポ ${melody.bpm} BPM / 演者 ${cfg.nPerformers}人 / 基本滞空 ${cfg.flight}秒)`);
+  lines.push(`投鈴 行動表  (テンポ ${melody.bpm} BPM / 演者 ${cfg.nPerformers}人 / 基本の投げ 高さ${TOREI.throwLevel(cfg.flight)}＝滞空${cfg.flight}秒)`);
+  lines.push(`投げの高さ: 1=低く速い(頭上0.6m) 2=0.9m 3=1.2m 4=1.6m 5=高く大きい(2.1m〜)`);
   const inv = {};
   for (const r of result.rings) {
     const h = r.home != null ? r.home : r.owner;
@@ -865,7 +905,7 @@ TOREI.actionText = function (result, melody, cfg) {
     const who = `${TOREI.perfName(a.perf)} ${handName[a.hand]}`;
     if (a.type === "pickup") lines.push(`${m}  ${who}: ${ring.label} を${a.from === "waki" ? "脇から取る" : "スタンドから取る"}`);
     if (a.type === "store") lines.push(`${m}  ${who}: ${ring.label} を${a.to === "waki" ? "脇に挟む" : a.to === "otherhand" ? "逆の手へ持ち替える" : "スタンドに掛ける"}`);
-    if (a.type === "throw") lines.push(`${m}  ${who}: ${ring.label} を投げる（滞空 ${a.flight.toFixed(1)}秒${a.pass ? `・${TOREI.perfName(a.catchPerf)}へパス` : a.catchHand !== a.hand ? "・逆の手で受ける" : ""}）`);
+    if (a.type === "throw") lines.push(`${m}  ${who}: ${ring.label} を投げる（高さ${TOREI.throwLevel(a.flight)}・滞空 ${a.flight.toFixed(1)}秒${a.pass ? `・${TOREI.perfName(a.catchPerf)}へパス` : a.catchHand !== a.hand ? "・逆の手で受ける" : ""}）`);
     if (a.type === "catch" && a.chordRole === "held") lines.push(`${m}  ${who}: 持っていた${ring.label}も一緒に鳴る → ♪${TOREI.noteName(a.midi)}（保持キャッチ和音）`);
     else if (a.type === "catch" && a.chordRole === "new") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}（和音：この手が持っていたリングも同時に鳴る）`);
     else if (a.type === "catch") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`);
