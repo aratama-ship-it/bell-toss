@@ -293,9 +293,14 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     if (ring.loc === "waki") { acqDur = C.T_WAKI; acqFrom = "waki"; }
     else if (ring.loc === "stand") { acqDur = T_STAND; acqFrom = "stand"; }
 
-    // 滞空時間の候補: 希望値を中心に外側へ探す
+    // 滞空時間の候補: 希望値を中心に外側へ探す。
+    // ★刻みは0.05（2026-08-23）。0.1刻みだと「基準±0.1の倍数」しか試せず、
+    // スライダーが0.95のとき1.00の成立窓に一度も届かない。テンポが速い曲では
+    // 成立窓が狭く、これが「滞空をわずかに動かすとパスが激減する」崖を作っていた
+    // （実測: ぶんぶんぶん96BPMで flight1.00=パス84% / 0.95=22%。0.05刻みで
+    // 0.95〜1.05が84%の平坦域になる）。
     const fCands = [];
-    for (let d = 0; d <= 1.6; d += 0.1) {
+    for (let d = 0; d <= 1.6; d += 0.05) {
       const a = +(cfg.flight + d).toFixed(2), b = +(cfg.flight - d).toFixed(2);
       if (b >= C.FLIGHT_MIN && b <= C.FLIGHT_MAX) fCands.push(b);
       if (d > 0 && a >= C.FLIGHT_MIN && a <= C.FLIGHT_MAX) fCands.push(a);

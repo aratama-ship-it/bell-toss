@@ -90,7 +90,7 @@ SONGS = [
         "bpm": 116, "beatsPerBar": 4, "beatUnit": "quarter",
         "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.75,
         "desc": "ゴスペルの定番(PD)。音高5つ(ド レ ミ ファ ソ)。noobnotes.net の音列で照合。"
-                "3人・116BPMでリング6本・パス94%。既存曲では最速の部類",
+                "3人・116BPMでリング6本・パス69%。既存曲では最速の部類",
         "notes": merge_repeats([
             (0,72,1),(1,76,1),(2,77,1),(3,79,4),
             (8,72,1),(9,76,1),(10,77,1),(11,79,4),
