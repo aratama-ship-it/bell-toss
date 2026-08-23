@@ -29,6 +29,15 @@
     <label>曲
       <select id="sel-preset"></select>
     </label>
+    <label>拍子
+      <select id="sel-meter" aria-label="拍子" title="小節の区切り方。音符の位置は変わらず、小節線と小節番号の数え方が変わる">
+        <option value="4">4/4</option>
+        <option value="3">3/4</option>
+        <option value="2">2/4</option>
+        <option value="6">6/8</option>
+        <option value="5">5/4</option>
+      </select>
+    </label>
     <button id="btn-clear">全消去</button>
     <span class="spacer"></span>
     <button id="btn-more-toggle" type="button" class="mini-wide" aria-expanded="false" aria-controls="transport-more">その他の操作 ▾</button>
@@ -113,11 +122,11 @@
 <script src="js/songs.js?v=18"></script>
 <script src="js/scheduler.js?v=3"></script>
 <script src="js/audio.js"></script>
-<script src="js/midi.js"></script>
+<script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=2"></script>
-<script src="js/main.js?v=11"></script>
+<script src="js/main.js?v=12"></script>
 </body>
 </html>

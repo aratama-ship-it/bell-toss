@@ -49,7 +49,10 @@ TOREI.midi = (() => {
     const usPerBeat = Math.round(60000000 / melody.bpm);
     tracks.push(trackChunk([
       { tick: 0, bytes: [0xff, 0x51, 0x03, (usPerBeat >> 16) & 0xff, (usPerBeat >> 8) & 0xff, usPerBeat & 0xff] },
-      { tick: 0, bytes: [0xff, 0x58, 0x04, melody.beatsPerBar || 4, 2, 24, 8] },
+      // 拍子メタ。6拍/小節は 6/8 として書く（分母 2^3=8分）。それ以外は 4分基準（2^2）。
+      // このツールの「拍」は抽象単位なので、6/8 でも1拍のtick数は変わらない
+      { tick: 0, bytes: [0xff, 0x58, 0x04, melody.beatsPerBar || 4,
+        (melody.beatsPerBar === 6 ? 3 : 2), 24, 8] },
     ]));
 
     // メロディ全体（チューブラーベル）

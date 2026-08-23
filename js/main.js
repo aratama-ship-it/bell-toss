@@ -206,6 +206,19 @@
   }
 
   // 滞空時間から最高到達点を出す（h = g*t^2/8）。投げの現実味を確かめるための表示。
+  // 拍子セレクタ。値を書き込む全経路（曲選択・JSON・MIDI読み込み）から呼ぶ。
+  // MIDIには 7/8 など選択肢にない拍子もあり得るので、そのときは動的に選択肢を足す
+  function setMeterUI(bpb) {
+    const sel = $("sel-meter");
+    if (![...sel.options].some(o => +o.value === bpb)) {
+      const o = document.createElement("option");
+      o.value = bpb;
+      o.textContent = `${bpb}拍子`;
+      sel.appendChild(o);
+    }
+    sel.value = bpb;
+  }
+
   // テンポはスライダー。つまみの位置と数値表示を必ず一緒に動かす
   function setBpmUI(bpm) {
     $("inp-bpm").value = bpm;
@@ -617,6 +630,7 @@
         state.melody = { bpm: Math.max(30, Math.min(200, m.bpm)),
                          beatsPerBar: m.beatsPerBar, notes: m.notes };
         setBpmUI(state.melody.bpm);
+        setMeterUI(state.melody.beatsPerBar || 4);
         $("sel-preset").value = "blank";
         state.pos = 0;
         setLoop(null);
@@ -659,6 +673,7 @@
     state.cfg.passMode = data.passMode;
 
     setBpmUI(data.bpm);
+    setMeterUI(data.beatsPerBar || 4);
     $("inp-performers").value = data.performers;
     $("inp-flight").value = data.flight;
     $("flight-val").textContent = data.flight.toFixed(2);
@@ -722,6 +737,7 @@
       notes: p.notes.map(n => ({ beat: n.beat, midi: n.midi })),
     };
     setBpmUI(p.bpm);
+    setMeterUI(p.beatsPerBar || 4);
     // 曲ごとの推奨設定（検証済みの成立条件）を自動で当てる
     if (p.performers) {
       state.cfg.nPerformers = p.performers;
@@ -828,6 +844,12 @@
     $("inp-bpm").addEventListener("input", () => {
       state.melody.bpm = Math.max(30, Math.min(200, +$("inp-bpm").value || 90));
       $("bpm-val").textContent = state.melody.bpm;
+      recompute();
+    });
+    $("sel-meter").addEventListener("change", () => {
+      // 音符の時刻は拍のまま動かさない。小節の数え方（ルーラー・読み出し・
+      // 「この小節を反復」・Shift+矢印）だけが新しい拍子に切り替わる
+      state.melody.beatsPerBar = +$("sel-meter").value || 4;
       recompute();
     });
     $("inp-performers").addEventListener("change", () => {
