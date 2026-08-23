@@ -367,6 +367,7 @@ SONGS = [
     },
     {
         "id": "kiyoshi",
+        "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "きよしこの夜 ※4人以上",
         "bpm": 54, "beatsPerBar": 3, "beatUnit": "quarter",
         "performers": 4, "passMode": "more", "standTime": 2.0,
@@ -402,6 +403,7 @@ SONGS = [
     },
     {
         "id": "greensleeves",
+        "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "グリーンスリーブス ※4人以上",
         "bpm": 67, "beatsPerBar": 6, "beatUnit": "eighth",
         "performers": 4, "passMode": "natural", "standTime": 2.0,
@@ -514,6 +516,7 @@ SONGS = [
     },
     {
         "id": "yuyake",
+        "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "夕焼け小焼け ※4人",
         "bpm": 60, "beatsPerBar": 4, "beatUnit": "quarter",
         "performers": 4, "passMode": "more", "standTime": 2.0, "flight": 1.1,
@@ -532,6 +535,7 @@ SONGS = [
     },
     {
         "id": "furudokei",
+        "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "大きな古時計 ※4人",
         "bpm": 60, "beatsPerBar": 4, "beatUnit": "quarter",
         "performers": 4, "passMode": "more", "standTime": 2.0, "flight": 1.3,
@@ -654,6 +658,7 @@ SONGS = [
     },
     {
         "id": "morobito",
+        "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "もろびとこぞりて ※4人",
         "bpm": 66, "beatsPerBar": 4, "beatUnit": "quarter",
         "performers": 4, "passMode": "more", "standTime": 2.0, "flight": 0.9,
@@ -771,11 +776,12 @@ def make_songs_js():
         notes = ",".join(
             f"{{beat:{b},midi:{m}}}" for b, m, d in s["notes"]
         )
+        hidden = "true" if s.get("hidden") else "false"
         lines.append(
             f'  {{ id: "{s["id"]}", name: "{s["name"]}", bpm: {s["bpm"]},'
             f' beatsPerBar: {s["beatsPerBar"]}, performers: {s.get("performers", 4)},'
             f' passMode: "{s.get("passMode", "more")}", standTime: {s.get("standTime", 2.0)},'
-            f' flight: {s.get("flight", 1.2)},'
+            f' flight: {s.get("flight", 1.2)}, hidden: {hidden},'
         )
         lines.append(f"    notes: [{notes}] }},")
     lines += [

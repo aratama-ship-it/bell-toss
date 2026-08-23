@@ -772,7 +772,10 @@
     $("inp-shake").checked = data.allowShake;
     updateFlightHeight();
 
-    $("sel-preset").value = TOREI.PRESETS.some(p => p.id === data.id) ? data.id : "blank";
+    // 非表示の曲を選択状態にはできない（<option>自体が無い）ので、
+    // 実際にドロップダウンへ出ている選択肢かどうかで判定する
+    const sel = $("sel-preset");
+    sel.value = [...sel.options].some(o => o.value === data.id) ? data.id : "blank";
     state.pos = 0;
     setLoop(null);
     recompute();
@@ -874,7 +877,10 @@
 
   function init() {
     const sel = $("sel-preset");
+    // 4人以上前提の曲は選べなくする（2026-08-23 本人指示）。データ自体は
+    // TOREI.SONGS / tools/analyze.mjs 側にそのまま残るので、後で戻すのも解析も可能
     for (const p of TOREI.PRESETS) {
+      if (p.hidden) continue;
       const o = document.createElement("option");
       o.value = p.id;
       o.textContent = p.name;
