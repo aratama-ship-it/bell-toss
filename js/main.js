@@ -392,11 +392,16 @@
   // rAFが止まっても、耳で合わせる稽古（音だけ流し続ける）が途切れないように。
   let loopTimer = null;
 
-  function scheduleFrom(simT) {
+  // simT 秒から鳴らす。baseTime を指定すると「その音声時刻ちょうどに simT が来る」よう
+  // 予約する（ループの継ぎ目用。省略時は今+0.08秒＝新規再生）。
+  function scheduleFrom(simT, baseTime) {
     const ctx = TOREI.audio.ensure();
-    TOREI.audio.beginSession();
+    const fresh = baseTime == null;
+    // 継ぎ目ではセッションを張り替えない。張り替えると前の周の残響と、
+    // 先行予約より後ろにある前の周の末尾の音が切れてしまう
+    if (fresh) TOREI.audio.beginSession();
     playT0 = simT;
-    playBase = ctx.currentTime + 0.08;
+    playBase = fresh ? ctx.currentTime + 0.08 : baseTime;
     const loopEnd = state.loop ? state.loop.b * spb() : Infinity;
     for (const a of state.result.actions) {
       if ((a.type === "catch" || a.type === "shake") && a.t >= simT - 1e-3 && a.t < loopEnd) {
@@ -406,9 +411,16 @@
     clearTimeout(loopTimer);
     loopTimer = null;
     if (state.loop) {
-      const delay = 80 + Math.max(0, (loopEnd - simT) * 1000);
+      // ★音ズレ修正（2026-08-23 本人報告）: 次の周は「前の周の音声時刻の続き」
+      // ちょうど（nextBase）に予約する。以前は巻き戻しタイマーが発火した時刻+0.08秒を
+      // 新しい基準にしていたため、設計上1周ごとに必ず80ms+タイマー誤差の遅れが挟まり、
+      // ループのたびにリズムがもたついた。
+      // タイマーは境界より0.35秒早く起こして先行予約する。タイマーが遅れても音声時刻の
+      // 基準はずれない（遅れた分は最初の音が詰まるだけで、周回誤差は蓄積しない）。
+      const nextBase = playBase + (loopEnd - simT);
+      const delay = Math.max(0, (nextBase - ctx.currentTime - 0.35) * 1000);
       loopTimer = setTimeout(() => {
-        if (playing && state.loop) scheduleFrom(state.loop.a * spb());
+        if (playing && state.loop) scheduleFrom(state.loop.a * spb(), nextBase);
       }, delay);
     }
   }
@@ -441,9 +453,13 @@
       if (!playing) return;
       const ctx = TOREI.audio.ctx;
       let pos = playT0 + (ctx.currentTime - playBase);
-      // ループの巻き戻し自体は scheduleFrom のタイマーが行う。
-      // タイマー発火までのわずかな間、表示だけ終端で止めておく。
-      if (state.loop) pos = Math.min(pos, state.loop.b * spb());
+      // 次の周を先行予約した直後は playBase が未来（境界時刻）を指す。境界を越えるまでは
+      // 前の周の続きの位置として表示すると、プレイヘッドが途切れず境界を通過する。
+      // 条件を pos < playT0 にしているのは、再生中にループ開始より前へシークした場合
+      // （playT0 がループ外）を誤って巻き込まないため
+      if (state.loop && pos < playT0 - 1e-6) {
+        pos += (state.loop.b - state.loop.a) * spb();
+      }
       state.pos = pos;
       TOREI.stage.render(pos);
       updatePlayheadEl();
