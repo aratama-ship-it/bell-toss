@@ -152,7 +152,13 @@
     if (idx >= 0) {
       const tr = cueRows[idx].tr;
       tr.classList.add("cue-now");
-      if (playing) tr.scrollIntoView({ block: "center", behavior: "instant" });
+      // 追従スクロールはQシートの箱（#cuesheet-body）の中だけで行う。
+      // scrollIntoView はページ全体まで動かしてしまい、再生中に画面が下へずれて
+      // 上部の舞台ビューが見えなくなる（2026-08-23 本人指摘で発覚）
+      if (playing) {
+        const box = $("cuesheet-body");
+        box.scrollTop = tr.offsetTop - box.clientHeight / 2 + tr.offsetHeight / 2;
+      }
     }
   }
 
