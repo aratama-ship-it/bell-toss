@@ -28,8 +28,18 @@ TOREI.SCHED = {
 };
 
 /* 乱択リスタート: コストに微小なジッターを加えて複数回走らせ、
-   (不可能数, 振り数, リング数) が最良の結果を採用する。シード固定で再現可能。 */
+   (不可能数, 振り数, 和音の欠け, リング数, パス率) が最良の結果を採用する。シード固定で再現可能。 */
 TOREI.schedule = function (melody, cfg) {
+  // 楽譜に書かれた和音（同時刻2音以上）の箇所数。採点で「和音が消えていないか」を見る。
+  // パスを強めると「静かに持つ」状態が減って保持キャッチ和音が消えるため、採点で守る
+  // （2026-08-23 パス重み強化と同時に導入。これが無いと和音を潰すシードが選ばれる）。
+  const chordSpots = (() => {
+    const m = new Map();
+    for (const n of melody.notes) { const k = n.beat.toFixed(6); m.set(k, (m.get(k) || 0) + 1); }
+    let c = 0;
+    for (const v of m.values()) if (v >= 2) c++;
+    return c;
+  })();
   let best = null, bestScore = Infinity;
   for (let seed = 0; seed < 20; seed++) {
     const r = TOREI._scheduleOnce(melody, cfg, seed);
@@ -37,12 +47,14 @@ TOREI.schedule = function (melody, cfg) {
     const shakes = r.noteResults.filter(x => x && x.kind === "shake").length;
     const throws = r.actions.filter(a => a.type === "throw");
     const passes = throws.filter(a => a.pass).length;
-    // 成立を最優先し、同点ならパスが多くリングが少ない編成を選ぶ
+    // 成立を最優先し、同点ならパスが多く・和音が残り・リングが少ない編成を選ぶ。
+    // パス率の重みは5→8（2026-08-23 本人要望「演者間のパスをよしとする重み付けを」）
     const passBonus = cfg.passMode === "off" ? 0
-      : (throws.length ? passes / throws.length : 0) * 5;
-    const score = fails * 1000 + shakes * 10 + r.rings.length * 0.1 - passBonus;
+      : (throws.length ? passes / throws.length : 0) * 8;
+    const chordMiss = chordSpots - r.actions.filter(a => a.chordRole === "held").length;
+    const score = fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1 - passBonus;
     if (score < bestScore) { bestScore = score; best = r; }
-    if (fails === 0 && shakes === 0 && passes === throws.length) break;
+    if (fails === 0 && shakes === 0 && chordMiss === 0 && passes === throws.length) break;
   }
   return best;
 };
@@ -63,8 +75,16 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   // 強いと安全だがパスが減る。両極を探索して最良を採る。
   const avoidLevel = seed % 3; // 0=弱い(パス多) 1=中 2=強い(安全)
   const T_STAND = cfg.standTime || C.T_STAND; // スタンド持ち替え時間（UI設定）
-  // パッシングの好み: more=積極的に他の演者へ投げ渡す / natural=必要な時だけ / off=なし
-  const passCost = cfg.passMode === "more" ? -0.1 : cfg.passMode === "off" ? Infinity : 0.5;
+  // パッシングの好み: more=積極的に他の演者へ投げ渡す / natural=必要な時だけ / off=なし。
+  // 「more」の積極性もseedで振る（avoidLevelと同じ発想: 両極を探索し、採点で選ぶ）。
+  // 全シードを強気(-0.7)にすると、パスしすぎて自分の担当音を出せない曲が20シード全滅する
+  // （実測: Swing Low が成立するのは avoidLevel=0 のシードだけで、そこが強気だと壊れる）。
+  // 強気/従来の分け方は avoidLevel(seed%3) と直交する floor(seed/3) の偶奇にして、
+  // 全avoidLevel × 両passCost の組み合わせが必ず試されるようにする。
+  const passAggressive = Math.floor(seed / 3) % 2 === 1;
+  const passCost = cfg.passMode === "off" ? Infinity
+    : cfg.passMode === "natural" ? 0.5
+    : passAggressive ? -0.7 : -0.1;
   const EPS = 1e-6;
   const spb = 60 / melody.bpm;
 
