@@ -23,6 +23,16 @@ TOREI.SCHED = {
   T_WAKI: 0.7,       // 脇に挟む / 脇から取る
   T_STAND: 2.0,      // スタンドに掛ける / スタンドから取る（移動込み。2026-08-21 本人指定）
   T_SHAKE: 0.35,     // 手元で振って鳴らす
+  // ★キャッチ前の回復時間（2026-08-23 本人指定）。手が空いてから、落ちてくるリングを
+  // 受けられる位置まで腕を戻すのに要る時間。これが無いと「脇に挟んだ0.018秒後に
+  // 同じ手でキャッチ」のような実演不可能な振付が出る。
+  // キャッチの占有区間を [t-T_RECOVER, t+T_CATCH] として表すことで、
+  // 「先に投げを計画→後からキャッチ」「先にキャッチ→後から投げを過去に挿入」の
+  // どちらの順序でも busy の重なり判定だけで守られる（片側だけの検査だと後者が漏れる）。
+  // 本人指定値: 投げてから0.4秒／脇に挟んでから0.3〜0.4秒。
+  // 投げの占有0.15秒・脇入れ0.7秒の直後から数えるので、共通値0.35秒で
+  // 投げ→0.50秒・脇→0.35秒となり、両方を満たす。
+  T_RECOVER: 0.35,
   T_HANDOFF: 0.4,    // 逆の手へ持ち替える
   PREP: -600,        // 準備時間の起点（曲全体を遡れるよう十分に昔）
 };
@@ -435,7 +445,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // （実測: 蛍の光で発生していた）
       if (storeTo === "otherhand" && isSelf && c === 1 - handIdx) continue;
       const ch = q.hands[c];
-      if (!isFree(ch, t, t + C.T_CATCH)) continue;
+      if (!isFree(ch, t - C.T_RECOVER, t + C.T_CATCH)) continue;
       const held = holdingAt(ch, t);
       const isChord = !!(forceCatch && held && held.ring === forceCatch.chordRing);
       const heldOk = held == null
@@ -682,7 +692,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       airborne.push({ perf: perf.id, from: plan.throwTime, to: t });
       if (cq.id !== perf.id) airborne.push({ perf: cq.id, from: plan.throwTime, to: t });
       closePoss(hand, ring.id, plan.throwTime);
-      ch.busy.push([t, t + C.T_CATCH]);
+      ch.busy.push([t - C.T_RECOVER, t + C.T_CATCH]);
       ch.poss.push({ ring: ring.id, from: t, to: Infinity });
       ring.loc = "hand";
       ring.hand = plan.catchHand;

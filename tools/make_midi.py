@@ -87,10 +87,10 @@ SONGS = [
     {
         "id": "saints",
         "name": "聖者の行進",
-        "bpm": 116, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.75,
+        "bpm": 114, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "ゴスペルの定番(PD)。音高5つ(ド レ ミ ファ ソ)。noobnotes.net の音列で照合。"
-                "3人・116BPMでリング6本・パス69%。既存曲では最速の部類",
+                "3人・114BPMでリング6本・パス86%。既存曲では最速の部類",
         "notes": merge_repeats([
             (0,72,1),(1,76,1),(2,77,1),(3,79,4),
             (8,72,1),(9,76,1),(10,77,1),(11,79,4),
@@ -165,10 +165,10 @@ SONGS = [
     {
         "id": "hayate",
         "name": "疾風（はやて）※3人・187BPM",
-        "bpm": 187, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.8,
+        "bpm": 183, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "収録曲で最速。音高5つを5拍周期で巡らせ、滞空0.85秒(頭上約0.9m)の"
-                "「低く速い投げ」に振った曲。187BPMでリング6本・パス97%。収録曲で最速",
+                "「低く速い投げ」に振った曲。183BPMでリング6本・パス97%。収録曲で最速",
         "notes": cycle_phrases([72, 74, 76, 79, 81], [
             ("cycle", (0, 1, 2, 3, 4), 1, 2), ("rest", 5),
             ("cycle", (4, 3, 2, 1, 0), 1, 2), ("rest", 5),
@@ -209,9 +209,9 @@ SONGS = [
         "id": "swinglow",
         "name": "Swing Low, Sweet Chariot ※3人",
         "bpm": 99, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.9,
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.8,
         "desc": "黒人霊歌(PD)。ヨナ抜きペンタトニックそのもの。低いソ・ラを上のオクターブへ畳んで"
-                "音高5つにし、隣接同音は merge_repeats(3拍) で統合。3人・99BPMでリング6本・パス68%",
+                "音高5つにし、隣接同音は merge_repeats(3拍) で統合。3人・99BPMでリング6本・パス97%",
         # 原曲の低いソ(G4=67)・ラ(A4=69)は、上のオクターブ(79/81)へ畳んで音高5つにしてある
         "notes": merge_repeats([
             (0,76,2),(2,72,2),(4,76,1),(5,72,1),(6,72,1),(7,81,0.5),(7.5,79,0.5),
@@ -227,10 +227,10 @@ SONGS = [
     {
         "id": "susanna",
         "name": "オー・スザンナ ※3人",
-        "bpm": 91, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0,
+        "bpm": 69, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "フォスター作(PD)。ほぼペンタトニック。隣接同音を merge_repeats(4拍) で大きく統合し、"
-                "跳ねるリズムを保ちつつ複製リングを抑えた。3人・92BPMでパス85%",
+                "跳ねるリズムを保ちつつ複製リングを抑えた。3人・69BPMでリング7本・パス91%",
         "notes": merge_repeats([
             (0,67,0.5),(0.5,69,0.5),(1,71,1),(2,74,1),(3,74,1),
             (4,76,1),(5,74,1),(6,71,2),
@@ -277,10 +277,10 @@ SONGS = [
     {
         "id": "gomon",
         "name": "五音の橋（オリジナル）※3人",
-        "bpm": 97, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0,
+        "bpm": 87, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "ヨナ抜き長音階(ド レ ミ ソ ラ)の5音だけ。リング5本で手元に大きな余裕ができ、"
-                "3人・97BPMでリング5本・パス97%。テンポも速く保てる",
+                "3人・87BPMでリング6本・パス97%。テンポも速く保てる",
         "notes": [
             (0,72,2),(2,76,2),(4,79,2),(6,74,2),
             (8,81,2),(10,76,2),(12,72,2),(14,79,2),
@@ -311,8 +311,8 @@ SONGS = [
     {
         "id": "korobeiniki",
         "name": "コロブチカ（テトリスのテーマ）※3人",
-        "bpm": 62, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.1,
+        "bpm": 46, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.8,
         "desc": "ロシア民謡。旋律はパブリックドメイン（テトリスのテーマとして有名）。"
                 "原曲は8分音符が連続して投げが間に合わないため、音価を2倍に引き伸ばした投鈴版。"
                 "音高8つと多い。3人・62BPMでリング10本・パス60%。曲中もスタンドを使う数少ない曲",
@@ -405,9 +405,9 @@ SONGS = [
         "id": "greensleeves",
         "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "グリーンスリーブス ※4人以上",
-        "bpm": 67, "beatsPerBar": 6, "beatUnit": "eighth",
-        "performers": 4, "passMode": "natural", "standTime": 2.0,
-        "desc": "音高10で最多。手元の余裕がなくパスはほとんど使えない(16%)。"
+        "bpm": 41, "beatsPerBar": 6, "beatUnit": "eighth",
+        "performers": 4, "passMode": "natural", "standTime": 2.0, "flight": 0.7,
+        "desc": "音高10で最多。手元の余裕がなくパスはほとんど使えない(27%)。"
                 "音高数が多い曲の限界を見る例として収録。4人・67BPM(8分基準)で全音成立",
         "notes": [
             (0,69,2),
@@ -500,7 +500,7 @@ SONGS = [
         "id": "bunbun",
         "name": "ぶんぶんぶん ※3人・2拍子",
         "bpm": 48, "beatsPerBar": 2, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.95,
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.4,
         "desc": "★ボヘミア民謡。2/4拍子・原曲の12小節形。ドレミファソの5音高のみ。"
                 "Yahoo知恵袋のドレミ譜で照合（ソファミ レミファレド…）。"
                 "8分音符は0.5拍で書く（一律1拍化すると中間部が2倍に間延びし、"
@@ -540,8 +540,8 @@ SONGS = [
         "id": "furudokei",
         "hidden": True,  # 2026-08-23 本人指示: 4人以上前提の曲は非表示
         "name": "大きな古時計 ※4人",
-        "bpm": 60, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 4, "passMode": "more", "standTime": 2.0, "flight": 1.3,
+        "bpm": 40, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 4, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "★H.C.ワーク(没1884)。音高9つで4人曲。Yahoo知恵袋のドレミ譜で照合"
                 "（ソードーティド…、ティ=シ）。前半とサビ",
         "notes": [
@@ -685,8 +685,8 @@ SONGS = [
     {
         "id": "kusakeiba",
         "name": "草競馬 ※3人",
-        "bpm": 48, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.9,
+        "bpm": 46, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "☆フォスター(没1864)。ドレミソラのヨナ抜き5音高。前半のみ。"
                 "ドゥーダー（ミレ ミレ）の掛け合いがパスの見せ場になる",
         "notes": [
@@ -703,8 +703,8 @@ SONGS = [
     {
         "id": "rowboat",
         "name": "こげこげボート ※3人・6/8",
-        "bpm": 48, "beatsPerBar": 6, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.9,
+        "bpm": 40, "beatsPerBar": 6, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7,
         "desc": "☆英米伝承の輪唱（Row, Row, Row Your Boat）。6/8拍子の代表として。"
                 "音高6つ（ドレミファソ＋上のド）",
         "notes": [

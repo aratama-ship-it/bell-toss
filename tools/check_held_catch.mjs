@@ -7,8 +7,12 @@
  * このスクリプトは全曲の採用スケジュールを走査し、和音フラグのないキャッチの瞬間に
  * 同じ手が別リングを保持しているケースを数える（あるべき値は常に0）。
  *
- * あわせて「キャッチ直前の手放し余裕」（同じ手が直前に投げ/置きしてからキャッチまでの
- * 時間）の分布も出す。余裕が短すぎる振付は実演で事実上「持ったままキャッチ」になる。
+ * あわせて「キャッチ直前の手放し余裕」も検査する。手が空いてから受け位置へ腕を戻す
+ * 時間が要るため、TOREI.SCHED.T_RECOVER（既定0.35秒）を下回るキャッチは実演では
+ * 事実上「持ったままキャッチ」になる。本人指定の必要値は
+ * 投げてから0.4秒／脇に挟んでから0.3〜0.4秒（2026-08-23）。
+ * 占有区間の終わりから数えるので、期待される最小余裕は
+ * 投げ: T_THROW+T_RECOVER=0.50秒 ／ 脇: T_RECOVER=0.35秒。
  *
  * 使い方: node tools/check_held_catch.mjs
  *
@@ -28,6 +32,7 @@ for (const f of ["js/presets.js","js/songs.js","js/scheduler.js"])
 const R = (t) => Math.round(t * 1e6) / 1e6;
 let totalViol = 0;
 const marginHist = {"<0.1":0,"0.1-0.2":0,"0.2-0.3":0,"0.3-0.5":0,">=0.5":0};
+const tooTight = [];
 for (const s of TOREI.SONGS) {
   const cfg = {nPerformers:s.performers||3, flight:s.flight||1.2, wakiCap:1, maxDup:2,
                allowShake:true, standTime:s.standTime||2.0, passMode:s.passMode||"more"};
@@ -36,9 +41,9 @@ for (const s of TOREI.SONGS) {
   for (const a of r.actions) {
     if (a.type==="catch") evs.push({t:R(a.t), kind:"in", p:a.perf,h:a.hand,ring:a.ring});
     else if (a.type==="pickup") evs.push({t:R(a.t+(a.dur||0)), kind:"in", p:a.perf,h:a.hand,ring:a.ring});
-    else if (a.type==="throw") evs.push({t:R(a.t), kind:"out", p:a.perf,h:a.hand,ring:a.ring});
+    else if (a.type==="throw") evs.push({t:R(a.t), kind:"out", why:"throw", p:a.perf,h:a.hand,ring:a.ring});
     else if (a.type==="store") {
-      evs.push({t:R(a.t+(a.dur||0)), kind:"out", p:a.perf,h:a.hand,ring:a.ring});
+      evs.push({t:R(a.t+(a.dur||0)), kind:"out", why:"store", p:a.perf,h:a.hand,ring:a.ring});
       if (a.to==="otherhand") evs.push({t:R(a.t+(a.dur||0)), kind:"in", p:a.perf,h:1-a.hand,ring:a.ring});
     }
   }
@@ -61,9 +66,16 @@ for (const s of TOREI.SONGS) {
       if (ring===a.ring) continue;
       if (st < a.t - 1e-4 && a.t < en - 1e-4) { viol++; break; }
     }
-    let lastOut=-Infinity;
-    for (const e of evs) if (e.kind==="out" && key(e.p,e.h)===k && e.t<=a.t+1e-6 && e.ring!==a.ring) lastOut=Math.max(lastOut,e.t);
+    let lastOut=-Infinity, lastKind="";
+    for (const e of evs) if (e.kind==="out" && key(e.p,e.h)===k && e.t<=a.t+1e-6 && e.ring!==a.ring) {
+      if (e.t>lastOut) { lastOut=e.t; lastKind=e.why||""; }
+    }
     const m=a.t-lastOut;
+    // 必要余裕: 投げの直後は占有0.15秒を含むので T_THROW+T_RECOVER
+    if (m<1000) {
+      const need = (lastKind==="throw" ? TOREI.SCHED.T_THROW : 0) + (TOREI.SCHED.T_RECOVER||0);
+      if (m < need - 1e-6) tooTight.push({song:s.id, t:a.t, m, kind:lastKind});
+    }
     if (m<1000) {
       if (m<0.1) marginHist["<0.1"]++;
       else if (m<0.2) marginHist["0.1-0.2"]++;
@@ -75,8 +87,14 @@ for (const s of TOREI.SONGS) {
   if (viol) console.log(`NG ${s.id}: ${viol}件`);
   totalViol += viol;
 }
+const REC = TOREI.SCHED.T_RECOVER || 0;
 console.log(totalViol === 0
   ? `ok 全${TOREI.SONGS.length}曲: 意図しない「持ったままキャッチ」（両鳴り）は0件`
   : `NG 合計${totalViol}件 — 楽譜にない音が鳴る振付が生成されている`);
 console.log("キャッチ直前の手放し余裕:", JSON.stringify(marginHist));
-process.exit(totalViol === 0 ? 0 : 1);
+// 回復時間の不足（投げ後は T_THROW+T_RECOVER、脇/台/逆手の後は T_RECOVER が下限）
+const tight = tooTight.length;
+console.log(tight === 0
+  ? `ok 回復時間（T_RECOVER=${REC}秒）を下回るキャッチも0件`
+  : `NG 回復時間不足 ${tight}件: ${tooTight.slice(0,5).map(x=>`${x.song} ${x.t.toFixed(2)}s ${x.kind} ${x.m.toFixed(3)}秒`).join(" / ")}`);
+process.exit(totalViol === 0 && tight === 0 ? 0 : 1);
