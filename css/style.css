@@ -401,6 +401,9 @@ footer {
   #btn-zoom-in,
   #btn-loop-bar,
   #btn-loop-clear,
+  #btn-bar-insert,
+  #btn-bar-delete,
+  #btn-bar-undo,
   #btn-more-toggle {
     min-height: 44px;
   }

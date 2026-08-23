@@ -34,6 +34,9 @@
 
   function recompute() {
     stopPlayback();
+    // 小節操作以外の編集が入ったら「取り消す」を無効化する。
+    // 古いスナップショットで新しい編集ごと巻き戻す事故を防ぐため
+    if (!inBarOp && typeof invalidateBarUndo === "function" && barSnapshot) invalidateBarUndo();
     state.result = TOREI.schedule(state.melody, state.cfg);
     const sp = spb();
     V.preBeats = Math.ceil(Math.max(0, -state.result.minT) / sp + 0.001);
@@ -469,6 +472,91 @@
     if (!playing) seek(a * spb());
   }
 
+  /* ---------- 小節の挿入・削除（2026-08-23 本人要望） ----------
+     どちらも再生位置の小節が対象。削除は音符が消える破壊的操作なので、
+     直前の状態を1段だけ持ち「取り消す」で戻せるようにする。
+     スナップショットは小節操作の間だけ有効で、他の編集（音符ドラッグ・
+     曲切替など）が入った時点で無効化する（古い状態へ巻き戻す事故を防ぐ）。 */
+  let barSnapshot = null;   // { notes, loop, pos }
+  let inBarOp = false;      // recompute に「小節操作中」を伝えるフラグ
+
+  function invalidateBarUndo() {
+    barSnapshot = null;
+    $("btn-bar-undo").hidden = true;
+  }
+
+  function takeBarSnapshot() {
+    barSnapshot = {
+      notes: state.melody.notes.map(n => ({ beat: n.beat, midi: n.midi })),
+      loop: state.loop ? { ...state.loop } : null,
+      pos: state.pos,
+    };
+    $("btn-bar-undo").hidden = false;
+  }
+
+  function insertBar() {
+    const EPS = 1e-6;
+    const bpb = state.melody.beatsPerBar || 4;
+    stopPlayback();
+    const beat = Math.max(0, state.pos / spb());
+    const a = Math.floor(beat / bpb) * bpb;
+    takeBarSnapshot();
+    inBarOp = true;
+    for (const n of state.melody.notes) if (n.beat >= a - EPS) n.beat += bpb;
+    if (state.loop) {
+      const l = { ...state.loop };
+      if (l.a >= a - EPS) l.a += bpb;
+      if (l.b > a + EPS) l.b += bpb;
+      setLoop(l);
+    }
+    recompute();
+    seek(a * spb(), { center: true });
+    inBarOp = false;
+    showNotice(`${a / bpb + 1}小節目に空の小節を挿入しました（以降を1小節後ろへ）`);
+  }
+
+  function deleteBar() {
+    const EPS = 1e-6;
+    const bpb = state.melody.beatsPerBar || 4;
+    stopPlayback();
+    const beat = Math.max(0, state.pos / spb());
+    const a = Math.floor(beat / bpb) * bpb;
+    const b = a + bpb;
+    takeBarSnapshot();
+    inBarOp = true;
+    const kept = [];
+    let removed = 0;
+    for (const n of state.melody.notes) {
+      if (n.beat >= a - EPS && n.beat < b - EPS) { removed++; continue; }
+      if (n.beat >= b - EPS) n.beat -= bpb;
+      kept.push(n);
+    }
+    state.melody.notes = kept;
+    if (state.loop) {
+      const l = { ...state.loop };
+      // 消した小節にかかるループは意味が変わるので解除。完全に後ろなら前へつめる
+      if (l.a < b - EPS && l.b > a + EPS) setLoop(null);
+      else if (l.a >= b - EPS) setLoop({ a: l.a - bpb, b: l.b - bpb });
+    }
+    recompute();
+    seek(a * spb(), { center: true });
+    inBarOp = false;
+    showNotice(`${a / bpb + 1}小節目を削除しました（音符${removed}個・以降を1小節前へ）`);
+  }
+
+  function undoBarOp() {
+    if (!barSnapshot) return;
+    stopPlayback();
+    inBarOp = true;
+    state.melody.notes = barSnapshot.notes;
+    setLoop(barSnapshot.loop);
+    recompute();
+    seek(barSnapshot.pos, { center: true });
+    inBarOp = false;
+    invalidateBarUndo();
+    showNotice("小節操作を取り消しました");
+  }
+
   /* ---------- 楽譜編集 ---------- */
 
   // ドラッグ編集の状態。音符の上で押すと掴む、空白で押すと新規追加してそのまま掴む。
@@ -840,6 +928,9 @@
     $("inp-zoom").addEventListener("input", () => zoomTo(+$("inp-zoom").value));
     $("btn-loop-bar").addEventListener("click", loopCurrentBar);
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
+    $("btn-bar-insert").addEventListener("click", insertBar);
+    $("btn-bar-delete").addEventListener("click", deleteBar);
+    $("btn-bar-undo").addEventListener("click", undoBarOp);
 
     $("inp-bpm").addEventListener("input", () => {
       state.melody.bpm = Math.max(30, Math.min(200, +$("inp-bpm").value || 90));

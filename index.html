@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 </head>
 <body>
 <header>
@@ -85,6 +85,12 @@
       <button id="btn-loop-bar" class="mini-wide"
         title="いまの小節を繰り返して稽古する（ルーラーを option+ドラッグすると任意の範囲）">この小節を反復</button>
       <button id="btn-loop-clear" class="mini-wide" hidden>ループ解除</button>
+      <button id="btn-bar-insert" class="mini-wide"
+        title="再生位置の小節の前に空の1小節を入れ、以降の音符を後ろへずらす">＋小節を挿入</button>
+      <button id="btn-bar-delete" class="mini-wide"
+        title="再生位置の小節を消し、以降の音符を前へつめる（この小節の音符は消える）">−小節を削除</button>
+      <button id="btn-bar-undo" class="mini-wide" hidden
+        title="直前の小節操作を取り消す">取り消す</button>
     </div>
     <div class="nav-row">
       <div class="nav-gutter">全体</div>
@@ -127,6 +133,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=2"></script>
-<script src="js/main.js?v=12"></script>
+<script src="js/main.js?v=13"></script>
 </body>
 </html>
