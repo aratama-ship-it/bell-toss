@@ -323,7 +323,13 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         const otherIdx = 1 - handIdx;
         const other = perf.hands[otherIdx];
         const hs = acqStart0 - C.T_HANDOFF;
-        if (isFree(other, hs, acqStart0)
+        // ★受け側の手を「以後ずっと空いているか」で検査する（2026-08-23 本人指摘への対応）。
+        // リングを持っている手でキャッチすると衝撃で両方鳴ってしまう（＝意図しない和音）。
+        // 持ち替えたリングがいつ受け手を出るかは将来の計画次第で確定できない。
+        // 「次の出番まで」の近似も試したが、その出番を別の複製リングが担って
+        // 持ち替えたリングが残留し、確定済みキャッチと両鳴りになった（実測: 蛍の光）。
+        // → 受け手に以後の予定が1つでもあれば持ち替えを諦める（waki/standへ流れる）。
+        if (isFree(other, hs, Infinity)
             && possConflict(other, hs, Infinity, storedPoss.ring).kind === "none") {
           storeTo = "otherhand";
           storeDur = C.T_HANDOFF;
@@ -422,6 +428,12 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     for (const [q, c] of catchTargets) {
       const isSelf = q.id === perf.id;
       if (!isSelf && passCost === Infinity) continue;
+      // ★この計画自身が「逆の手へ退避」を含むなら、その退避先の手では受けない
+      // （2026-08-23 本人指摘「持っている手でキャッチすると両方鳴る」への対応）。
+      // 退避はまだ適用前なので holdingAt には映らず、ここで見ない限り
+      // 「退避したリングを持った手でキャッチ」という両鳴りの計画が通ってしまう
+      // （実測: 蛍の光で発生していた）
+      if (storeTo === "otherhand" && isSelf && c === 1 - handIdx) continue;
       const ch = q.hands[c];
       if (!isFree(ch, t, t + C.T_CATCH)) continue;
       const held = holdingAt(ch, t);
@@ -480,7 +492,8 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     const hand = perf.hands[handIdx];
     const otherIdx = 1 - handIdx;
     const other = perf.hands[otherIdx];
-    if (isFree(other, after, after + C.T_HANDOFF)
+    // 逆の手は「以後ずっと空いているか」で検査（tryWindowのotherhandと同じ理由。両鳴り防止）
+    if (isFree(other, after, Infinity)
         && possConflict(other, after, Infinity, ringId).kind === "none") {
       return { perf, handIdx, ringId, to: "otherhand", start: after, dur: C.T_HANDOFF, cost: C.T_HANDOFF };
     }
