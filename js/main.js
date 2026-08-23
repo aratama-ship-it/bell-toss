@@ -452,13 +452,21 @@
     const tick = () => {
       if (!playing) return;
       const ctx = TOREI.audio.ctx;
-      let pos = playT0 + (ctx.currentTime - playBase);
+      // 出力遅延の補正（2026-08-23 本人報告「通常再生でも音ズレ」への対応）。
+      // Bluetoothイヤホン等では音がスピーカーに届くまで0.1〜0.3秒かかり、
+      // 補正しないと映像（プレイヘッド・舞台）が音より先に動いて「ズレ」に見える。
+      // 表示は「いま耳に聞こえている音」の位置に合わせる
+      const lat = ctx.outputLatency || ctx.baseLatency || 0;
+      let pos = playT0 + (ctx.currentTime - playBase) - lat;
       // 次の周を先行予約した直後は playBase が未来（境界時刻）を指す。境界を越えるまでは
       // 前の周の続きの位置として表示すると、プレイヘッドが途切れず境界を通過する。
-      // 条件を pos < playT0 にしているのは、再生中にループ開始より前へシークした場合
+      // 条件の playT0 >= loop.a は、再生中にループ開始より前へシークした場合
       // （playT0 がループ外）を誤って巻き込まないため
-      if (state.loop && pos < playT0 - 1e-6) {
-        pos += (state.loop.b - state.loop.a) * spb();
+      if (state.loop) {
+        const La = state.loop.a * spb();
+        if (pos < La - 1e-6 && playT0 >= La - 1e-6) {
+          pos += (state.loop.b - state.loop.a) * spb();
+        }
       }
       state.pos = pos;
       TOREI.stage.render(pos);
