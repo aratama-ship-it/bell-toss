@@ -19,6 +19,7 @@
   let playT0 = 0;     // シミュレーション上の開始時刻
   let rafId = null;
   let navRaf = 0;
+  let saveTimer = null;
   let hlEls = [];      // 行動表の「今どの行動が進行中か」ハイライト（演者×手の数だけ）
 
   const $ = (id) => document.getElementById(id);
@@ -42,6 +43,13 @@
     V.clampPPB();
     clampPos();
     drawAll();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const sel = $("sel-preset");
+      const option = sel && sel.options[sel.selectedIndex];
+      if (!sel || !option) return;
+      TOREI.songfile.save(TOREI.songfile.serialize(state, sel.value, option.textContent));
+    }, 400);
   }
 
   function clampPos() {
@@ -598,6 +606,76 @@
     showNotice._t = setTimeout(() => { el.hidden = true; }, 6000);
   }
 
+  /* ---------- 曲データの保存・復元 ---------- */
+
+  function applySongData(data) {
+    state.melody = {
+      bpm: data.bpm,
+      beatsPerBar: data.beatsPerBar,
+      notes: data.notes.map(n => ({ beat: n.beat, midi: n.midi })),
+    };
+    state.cfg.nPerformers = data.performers;
+    state.cfg.flight = data.flight;
+    state.cfg.wakiCap = data.wakiCap;
+    state.cfg.maxDup = data.maxDup;
+    state.cfg.allowShake = data.allowShake;
+    state.cfg.standTime = data.standTime;
+    state.cfg.passMode = data.passMode;
+
+    $("inp-bpm").value = data.bpm;
+    $("inp-performers").value = data.performers;
+    $("inp-flight").value = data.flight;
+    $("flight-val").textContent = data.flight.toFixed(2);
+    $("inp-waki").value = data.wakiCap;
+    $("inp-stand").value = data.standTime;
+    $("sel-pass").value = data.passMode;
+    $("inp-dup").value = data.maxDup;
+    $("inp-shake").checked = data.allowShake;
+    updateFlightHeight();
+
+    $("sel-preset").value = TOREI.PRESETS.some(p => p.id === data.id) ? data.id : "blank";
+    state.pos = 0;
+    setLoop(null);
+    recompute();
+    scrollToSongHead();
+  }
+
+  function downloadSongData() {
+    const sel = $("sel-preset");
+    const option = sel.options[sel.selectedIndex];
+    const id = sel.value;
+    const obj = TOREI.songfile.serialize(state, id, option ? option.textContent : "");
+    const blob = new Blob([JSON.stringify(obj, null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = id ? `torei_${id}.json` : "torei_melody.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  function onJsonFile(ev) {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const reason = TOREI.songfile.validate(data);
+        if (reason) throw new Error(reason);
+        applySongData(data);
+        showNotice(`${file.name} を読み込みました（${data.notes.length}音 / ${data.bpm}BPM）`);
+      } catch (e) {
+        showNotice("読み込めませんでした: " + e.message, true);
+      }
+      ev.target.value = "";
+    };
+    reader.onerror = () => {
+      showNotice("読み込めませんでした: ファイルの読み取りに失敗しました", true);
+      ev.target.value = "";
+    };
+    reader.readAsText(file);
+  }
+
   /* ---------- 初期化 ---------- */
 
   function loadPreset(id) {
@@ -692,6 +770,9 @@
         window.prompt("コピーできない環境のため、手動でコピーしてください:", text.slice(0, 500));
       }
     });
+    $("btn-save-json").addEventListener("click", downloadSongData);
+    $("btn-open-json").addEventListener("click", () => $("inp-json-file").click());
+    $("inp-json-file").addEventListener("change", onJsonFile);
 
     // ズームとループ
     $("btn-zoom-out").addEventListener("click", () => zoomTo(V.PPB / 1.3));
@@ -783,7 +864,23 @@
     });
 
     updateFlightHeight();
-    loadPreset("saints");
+    const saved = TOREI.songfile.load();
+    if (saved && !TOREI.songfile.validate(saved)) {
+      applySongData(saved);
+      // 復元した中身が元の曲と違うなら、曲セレクタは「白紙」に戻す。
+      // 同じ曲名が選ばれたままだと、それを選び直しても change イベントが出ず
+      // 元の曲に戻せない（セレクタの表示が嘘になる）。
+      const src = TOREI.PRESETS.find(p => p.id === saved.id);
+      const edited = !src || src.bpm !== saved.bpm ||
+        src.notes.length !== saved.notes.length ||
+        src.notes.some((n, i) => n.beat !== saved.notes[i].beat || n.midi !== saved.notes[i].midi);
+      if (edited) $("sel-preset").value = "blank";
+      showNotice(edited && src
+        ? `前回の続き（「${src.name}」を編集したもの）を復元しました。曲を選び直すと破棄されます`
+        : "前回の続きを復元しました。曲を選び直すと破棄されます");
+    } else {
+      loadPreset("saints");
+    }
   }
 
   document.addEventListener("DOMContentLoaded", init);
