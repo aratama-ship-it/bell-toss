@@ -106,11 +106,17 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
      振り（手元で鳴らす）はジャグリング要素がないので多用させない。
      フレーズの末尾なら「余韻を鳴らす所作」として演出上成立するので、そこだけ許す。
 
-     フレーズ末 = 次の打点までが「直前までの音の流れの2倍以上」かつ「3拍以上」空く音、
-     および曲の最後の音。両方を課すのは、片方だけだと不安定なため:
+     フレーズ末 = 次の打点までが「直前までの音の流れの2倍以上」かつ「1小節分以上」
+     空く音、および曲の最後の音。両方を課すのは、片方だけだと不安定なため:
        ・倍率だけだと、音が詰まった速い曲でわずかな隙間まで拾ってしまう
-       ・拍数だけだと、もともとゆったりした曲では全部の音がフレーズ末になる
-     実測（全19曲）で1曲あたり1〜9箇所に収まることを確認した閾値。 */
+       ・休みの長さだけだと、もともとゆったりした曲では全部の音がフレーズ末になる
+
+     ★休みの長さの基準は「3拍固定」ではなく beatsPerBar（1小節分）にする
+     （2026-08-24 本人指摘で修正）。旧実装の3拍固定は拍子を無視していたため、
+     2/4拍子のぶんぶんぶんでは「まるまる1小節の休符」（2拍）すらフレーズ末と
+     認められず、「はちがとぶ」の結びのドが振りで代用できなかった。
+     1小節分にすると音楽的な区切りと一致し、かつ全34曲の合計は101→94箇所と
+     むしろ厳格になる（蛍の光の過剰検出21→2など）。 */
   const onsets = [...new Set(notes.map(n => n.beat))].sort((a, b) => a - b);
   const gapsB = [];
   for (let i = 1; i < onsets.length; i++) gapsB.push(onsets[i] - onsets[i - 1]);
@@ -120,7 +126,8 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   for (let i = 0; i < onsets.length; i++) {
     if (i === onsets.length - 1) { phraseEndBeats.add(onsets[i]); continue; }
     const g = onsets[i + 1] - onsets[i];
-    if (g >= medGap * 2 - EPS && g >= 3 - EPS) phraseEndBeats.add(onsets[i]);
+    const barBeats = melody.beatsPerBar || 4;
+    if (g >= medGap * 2 - EPS && g >= barBeats - EPS) phraseEndBeats.add(onsets[i]);
   }
   const isPhraseEnd = (note) => phraseEndBeats.has(note.beat);
 
