@@ -115,8 +115,14 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
      （2026-08-24 本人指摘で修正）。旧実装の3拍固定は拍子を無視していたため、
      2/4拍子のぶんぶんぶんでは「まるまる1小節の休符」（2拍）すらフレーズ末と
      認められず、「はちがとぶ」の結びのドが振りで代用できなかった。
-     1小節分にすると音楽的な区切りと一致し、かつ全34曲の合計は101→94箇所と
-     むしろ厳格になる（蛍の光の過剰検出21→2など）。 */
+
+     ★さらに「次の打点が小節頭」なら1小節分に満たなくてもフレーズ末とみなす
+     （2026-08-25 全曲点検で追加）。弱起（アウフタクト）の曲は2拍目などから
+     フレーズが始まるため、結びの音の後ろは「小節の残り」＝1小節未満の休符になる。
+     メリーさんのひつじ「…ひつじね」・グーチョキパー「…なにつくろう」・
+     蛍の光の各フレーズ末がこれで取りこぼされていた。
+     ただし単に小節をまたぐだけの音まで拾わないよう、休みが中央値の3倍以上あることも
+     課す（この条件なしだと全34曲で94→177箇所と倍近く緩む。3倍を課せば101箇所）。 */
   const onsets = [...new Set(notes.map(n => n.beat))].sort((a, b) => a - b);
   const gapsB = [];
   for (let i = 1; i < onsets.length; i++) gapsB.push(onsets[i] - onsets[i - 1]);
@@ -127,7 +133,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     if (i === onsets.length - 1) { phraseEndBeats.add(onsets[i]); continue; }
     const g = onsets[i + 1] - onsets[i];
     const barBeats = melody.beatsPerBar || 4;
-    if (g >= medGap * 2 - EPS && g >= barBeats - EPS) phraseEndBeats.add(onsets[i]);
+    const nextAtBarline = Math.abs(onsets[i + 1] % barBeats) < EPS;
+    const longEnough = g >= barBeats - EPS
+      || (nextAtBarline && g >= medGap * 3 - EPS);
+    if (g >= medGap * 2 - EPS && longEnough) phraseEndBeats.add(onsets[i]);
   }
   const isPhraseEnd = (note) => phraseEndBeats.has(note.beat);
 
