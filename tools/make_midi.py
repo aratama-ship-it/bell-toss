@@ -424,8 +424,8 @@ SONGS = [
     {
         "id": "kasanesuzu",
         "name": "重ね鈴（オリジナル・和音の稿）※3人",
-        "bpm": 66, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.3,
+        "bpm": 60, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.6,
         "desc": "保持キャッチ和音を先に置いてから旋律を書いた曲。ラドレミソの5音、1音2拍の遅い稿。"
                 "同時刻2音を6箇所書き、6箇所すべてが1手の和音として成立する"
                 "（tools/analyze.mjs で確認。既存曲は最多でも3箇所）。3人・66BPMでリング8本・パス70%。"
@@ -500,7 +500,7 @@ SONGS = [
         "id": "bunbun",
         "name": "ぶんぶんぶん ※3人・2拍子",
         "bpm": 54, "beatsPerBar": 2, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.7, "maxDup": 1,
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.0, "maxDup": 1,
         "desc": "★ボヘミア民謡。2/4拍子・原曲の12小節形。ドレミファソの5音高のみ。"
                 "Yahoo知恵袋のドレミ譜で照合（ソファミ レミファレド…）。"
                 "8分音符は0.5拍で書く（2026-08-23修正）。"
@@ -621,8 +621,8 @@ SONGS = [
     {
         "id": "jingle",
         "name": "ジングルベル ※3人",
-        "bpm": 60, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.2,
+        "bpm": 50, "beatsPerBar": 4, "beatUnit": "quarter",
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.75,
         "desc": "☆J.ピアポント(没1893)。サビのみ。ドレミファソの5音高。"
                 "ミの同音連続が主役なのでテンポを落とし複製リングでさばく。鈴の曲＝投鈴向き",
         "notes": [
@@ -791,14 +791,16 @@ def make_songs_js():
             f"{{beat:{b},midi:{m}}}" for b, m, d in s["notes"]
         )
         hidden = "true" if s.get("hidden") else "false"
-        # maxDup は任意項目（既定はUI側の2のまま）。曲側で複製リング数を指定したい
-        # 場合だけ出力する（2026-08-24 ぶんぶんぶんのリング最適化で追加）。
-        maxDup = f' maxDup: {s["maxDup"]},' if "maxDup" in s else ""
+        # maxDup は常に明示する（2026-08-24 修正）。曲を切り替えても「前の曲の値を
+        # 引き継ぐ」流儀は他の推奨設定（flight等）と同じだが、maxDup だけは値の違いが
+        # 再生可否そのものを左右するため、無指定＝引き継ぎのままだと「ぶんぶんぶんを見た後
+        # 他の曲へ切り替えると成立しなくなる」事故が起きた（実機で11曲を確認）。
+        # 全曲へ検証済みの値（既定2、ぶんぶんぶんのみ1）を明示することで解決する。
         lines.append(
             f'  {{ id: "{s["id"]}", name: "{s["name"]}", bpm: {s["bpm"]},'
             f' beatsPerBar: {s["beatsPerBar"]}, performers: {s.get("performers", 4)},'
             f' passMode: "{s.get("passMode", "more")}", standTime: {s.get("standTime", 2.0)},'
-            f' flight: {s.get("flight", 1.2)},{maxDup} hidden: {hidden},'
+            f' flight: {s.get("flight", 1.2)}, maxDup: {s.get("maxDup", 2)}, hidden: {hidden},'
         )
         lines.append(f"    notes: [{notes}] }},")
     lines += [

@@ -193,13 +193,36 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         load[best]++;
       }
     }
-    // 開演前にスタンドから取り出して手・脇へ。1人ずつ順に（体ごと動くので並行できない）
+    // 開演前にスタンドから取り出して手・脇へ。1人ずつ順に（体ごと動くので並行できない）。
+    // ★手より先に脇を使う（2026-08-24 本人指摘への対応）。
+    // 旧実装は「配列順で手2本→脇」という機械的な割り当てで、2本しか持たない演者は
+    // 曲の後半でしか使わないリングでも問答無用で開演前から両手を塞いでいた
+    // （例: ぶんぶんぶん演者1がソ・ミの2本を両手に持ち、曲頭で誰ともパスできなかった）。
+    // 脇からの取り出しは0.7秒で、曲中の通常のスケジューリングが普通に扱える
+    // （スタンドと違い「曲中はほぼ不可能」ではない）。そこで、初出が最も早い
+    // リングだけを最初から手に持ち、残りは脇の枠が空いている限り脇へ回す。
+    // 脇が尽きたときだけ2本目の手を使う（＝旧実装と同じ最終手段）。
     for (const perf of perfs) {
       const mine = rings.filter(r => r.owner === perf.id);
+      const withDeadline = mine.map(r => ({ r, dl: nextNeed(r.midi, -1e9) ?? Infinity }))
+        .sort((a, b) => a.dl - b.dl);
       let cursor = -4; // 曲頭から遡って配置していく
-      let handSlot = 0;
-      for (const r of mine) {
-        const toWaki = handSlot >= 2;
+      let handUsed = 0, wakiUsed = 0;
+      for (const { r } of withDeadline) {
+        let toWaki, handSlot;
+        if (handUsed === 0) {
+          // 最初の1本は必ず手0（最速で必要になるので即使える必要がある）
+          toWaki = false; handSlot = 0;
+        } else if (wakiUsed < cfg.wakiCap) {
+          // 脇へ運ぶ「作業する手」は常に手0を使う。手0の恒久保持はこのループの
+          // 最初（＝この演者の準備アクションの中で最も遅い時刻に始まる）ので、
+          // ここより後で処理される（＝より早い時刻に起こる）脇作業と絶対に重ならない。
+          toWaki = true; handSlot = 0;
+        } else {
+          // 脇が尽きたら2本目の手（capacity=2+wakiCapの上限があるので高々1回）
+          toWaki = false; handSlot = 1;
+        }
+        if (!toWaki) handUsed++; else wakiUsed++;
         const dur = T_STAND + (toWaki ? C.T_WAKI : 0);
         cursor -= dur + 0.3;
         actions.push({ type: "pickup", perf: perf.id, hand: handSlot % 2, ring: r.id,
@@ -218,7 +241,6 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
           r.hand = handSlot;
         }
         r.readyAt = cursor + dur;
-        handSlot++;
       }
     }
   }

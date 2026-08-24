@@ -960,13 +960,12 @@
       $("flight-val").textContent = p.flight.toFixed(2);
       updateFlightHeight();
     }
-    // 同音リング最大。曲側で指定が無ければ直前の値のまま（他の推奨設定と同じ流儀）。
-    // ぶんぶんぶんのように「複製リングを作らない」ことでリング数と使用回数の偏りを
-    // 解消した曲のために追加（2026-08-24）
-    if (p.maxDup) {
-      state.cfg.maxDup = p.maxDup;
-      $("inp-dup").value = p.maxDup;
-    }
+    // 同音リング最大。全曲が明示した値を持つ（2026-08-24修正）ので無条件に反映する。
+    // 「指定が無ければ引き継ぐ」流儀（flight等と同じ）にしていたら、ぶんぶんぶんの
+    // maxDup=1を見た後に他の曲へ切り替えると、その曲が本来必要とする値に戻らず
+    // 再生不可能になる事故が起きた（実機で11曲を確認）。
+    state.cfg.maxDup = p.maxDup || 2;
+    $("inp-dup").value = state.cfg.maxDup;
     state.pos = 0;
     setLoop(null);
     recompute();
