@@ -960,6 +960,13 @@
       $("flight-val").textContent = p.flight.toFixed(2);
       updateFlightHeight();
     }
+    // 同音リング最大。曲側で指定が無ければ直前の値のまま（他の推奨設定と同じ流儀）。
+    // ぶんぶんぶんのように「複製リングを作らない」ことでリング数と使用回数の偏りを
+    // 解消した曲のために追加（2026-08-24）
+    if (p.maxDup) {
+      state.cfg.maxDup = p.maxDup;
+      $("inp-dup").value = p.maxDup;
+    }
     state.pos = 0;
     setLoop(null);
     recompute();
