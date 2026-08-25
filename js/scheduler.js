@@ -51,7 +51,12 @@ TOREI.schedule = function (melody, cfg) {
     return c;
   })();
   let best = null, bestScore = Infinity;
-  for (let seed = 0; seed < 20; seed++) {
+  // 探索するシード数。準備配置(prepHandFirst)を探索次元に加えて組み合わせが
+  // 3(avoidLevel)×2(passAggressive)×2(prepHandFirst)=12通りになったため、20では
+  // 各組み合わせを1〜2回しか引けず、良い解を取りこぼしていた。48まで広げると
+  // 各組み合わせを4回試せる（実測: 全34曲の平均パス率 74.0%→81.0%、不可0・振り0は維持）。
+  // 1曲あたり約80ms。スライダー操作はデバウンスしてあるので体感には出ない。
+  for (let seed = 0; seed < 48; seed++) {
     const r = TOREI._scheduleOnce(melody, cfg, seed);
     const fails = r.noteResults.filter(x => x && x.kind === "fail").length;
     const shakes = r.noteResults.filter(x => x && x.kind === "shake").length;
@@ -59,10 +64,24 @@ TOREI.schedule = function (melody, cfg) {
     const passes = throws.filter(a => a.pass).length;
     // 成立を最優先し、同点ならパスが多く・和音が残り・リングが少ない編成を選ぶ。
     // パス率の重みは5→8（2026-08-23 本人要望「演者間のパスをよしとする重み付けを」）
-    const passBonus = cfg.passMode === "off" ? 0
-      : (throws.length ? passes / throws.length : 0) * 8;
+    const passRate = throws.length ? passes / throws.length : 0;
+    const passBonus = cfg.passMode === "off" ? 0 : passRate * 8;
+    // パス率20%は本人が定めた下限（2026-08-25）。比例ボーナスだけだと、
+    // 所作やリング数の小さな得と引き換えに下限を割る編成が選ばれうる。
+    // 下限を割った分だけ急に重くして「まず20%を確保してから他を最適化する」順序にする。
+    const passFloor = (cfg.passMode === "off" || !throws.length) ? 0
+      : Math.max(0, 0.20 - passRate) * 100;
     const chordMiss = chordSpots - r.actions.filter(a => a.chordRole === "held").length;
-    const score = fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1 - passBonus;
+    // 無駄な所作を減らす（2026-08-25 本人指摘）。持ち替えと脇の出し入れは
+    // 音楽的には何も生まないのに手数と時間だけ食う。成立・和音より弱く、
+    // パス率と競える程度の重みにして、同じ成立度なら所作の少ない編成を選ばせる。
+    const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand").length;
+    const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
+    // 曲中の脇の出し入れは減点しない。本人が挙げたのは「準備の脇」と「持ち替え」で、
+    // 曲中の脇は3本以上を扱う演者には正当な技法。ここを減点するとパス率を大きく削る
+    // （実測: グーチョキパー75%→31%、ジングルベル69%→37%）。
+    const fuss = handoffs * 0.5 + prepWaki * 0.4;
+    const score = fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1 + fuss + passFloor - passBonus;
     if (score < bestScore) { bestScore = score; best = r; }
     if (fails === 0 && shakes === 0 && chordMiss === 0 && passes === throws.length) break;
   }
@@ -92,6 +111,19 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   // 強気/従来の分け方は avoidLevel(seed%3) と直交する floor(seed/3) の偶奇にして、
   // 全avoidLevel × 両passCost の組み合わせが必ず試されるようにする。
   const passAggressive = Math.floor(seed / 3) % 2 === 1;
+  // 開演時の配置も両極を探索する。「脇を先に使う」か「両手を先に埋める」か。
+  // どちらが良いかは曲による: 曲頭でキャッチが要るなら手を空けておきたいし、
+  // そうでないなら脇は取り出しの0.7秒と所作が増えるだけの無駄になる
+  // （2026-08-25 本人指摘「演者1が最初に脇に挟むのは全く無意味」）。
+  // seed%3(avoidLevel) と floor(seed/3)%2(passAggressive) に直交させるので、
+  // seed 0〜11 で 3×2×2=12 通りの組み合わせが必ず一巡する。
+  // ★演者ごとに別々に決める。全員一律にすると必ずどちらかの弊害が出る:
+  //   全員「脇を先に」→ 手が空いている演者まで無意味に脇を使う（本人指摘）
+  //   全員「両手を先に」→ 曲頭で両手が塞がってパスを受けられない演者が出る
+  //     （2026-08-24 に一度これで壊れている。ぶんぶんぶんの冒頭ソが自分投げに落ちた）
+  // seed から演者ごとのビットを取り出し、混在した配置も探索対象にする。
+  const prepBits = ((seed + 1) * 2246822519) >>> 0;
+  const prepHandFirstFor = (i) => ((prepBits >>> (i + 3)) & 1) === 1;
   const passCost = cfg.passMode === "off" ? Infinity
     : cfg.passMode === "natural" ? 0.5
     : passAggressive ? -0.7 : -0.1;
@@ -229,6 +261,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         if (handUsed === 0) {
           // 最初の1本は必ず手0（最速で必要になるので即使える必要がある）
           toWaki = false; handSlot = 0;
+        } else if (prepHandFirstFor(perf.id) && handUsed < 2) {
+          // 両手を先に埋める方針。脇の出し入れが要らないぶん所作が減る
+          toWaki = false; handSlot = 1;
         } else if (wakiUsed < cfg.wakiCap) {
           // 脇へ運ぶ「作業する手」は常に手0を使う。手0の恒久保持はこのループの
           // 最初（＝この演者の準備アクションの中で最も遅い時刻に始まる）ので、
@@ -506,7 +541,14 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
           if (nt != null && nt - t < avoidWin) busySoon += avoidCost;
         }
       }
-      const cc = (isSelf ? (c === handIdx ? 0.25 : 0) : passCost) + q.load * 0.3 + busySoon;
+      // 自分で投げて自分で受けるとき、どちらの手で受けるか。
+      // ★以前は同じ手を 0.25、逆の手を 0 として「わざわざ逆の手へ渡る」方を選ばせていた。
+      // これが「右手で投げ→左手でキャッチ→右手へ持ち替え」という無駄な往復を生んでいた
+      // （2026-08-25 本人指摘「最初から右手から右手でいいです」）。
+      // 投げた手が空いているならその手で受けるのが自然で、持ち替えも要らない。
+      // 逆の手を完全に禁じると交差の動きが消えるので、わずかな差にとどめて必要な時は選べるようにする。
+      const selfCost = c === handIdx ? 0.2 : 0.22;
+      const cc = (isSelf ? selfCost : passCost) + q.load * 0.3 + busySoon;
       if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc, chord: isChord };
     }
     if (!bestCatch) return null;
@@ -972,6 +1014,46 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 /* Qシート: 1人の演者の手順だけを時刻順に抜き出す（稽古で自分のパートを覚えるための表）。
    文言は actionText と揃える。UI側（main.js）はこの配列を表にするだけ。
    行: { t, label(時刻表示), bar(小節.拍 or 準備), hand, text, kind, until } */
+/* 開演時に誰が何の音のリングをどこに持っているか（2026-08-25 本人要望）。
+   ring.loc / ring.hand は曲を通して書き換わる「最終状態」なので初期配置には使えない。
+   準備フェーズ（prep:true）の行動だけを読んで、開演の瞬間の持ち方を組み立てる。
+   スタンドから取る→（脇へ挟む）という2手順なので、脇へのstoreがあれば脇、なければその手。 */
+TOREI.initialLayout = function (result, nPerformers) {
+  const n = nPerformers || (result.rings.reduce((a, r) => Math.max(a, (r.home != null ? r.home : r.owner) + 1), 0));
+  const slots = [];
+  for (let i = 0; i < n; i++) slots.push({ perf: i, hands: [null, null], waki: [], stand: [] });
+
+  const placed = new Set();
+  for (const a of result.actions) {
+    if (!a.prep || a.type !== "pickup") continue;
+    const ring = result.rings[a.ring];
+    const sl = slots[a.perf];
+    if (!ring || !sl) continue;
+    // 同じリングが脇へ回されるなら、その後のstoreで上書きする
+    const toWaki = result.actions.some(b => b.prep && b.type === "store" && b.ring === a.ring && b.to === "waki");
+    if (toWaki) sl.waki.push(ring);
+    else sl.hands[a.hand] = ring;
+    placed.add(a.ring);
+  }
+  // 準備で誰も取らなかったリングは開演時スタンドに残っている
+  for (const r of result.rings) {
+    if (placed.has(r.id)) continue;
+    const home = r.home != null ? r.home : r.owner;
+    if (slots[home]) slots[home].stand.push(r);
+  }
+  return slots;
+};
+
+// 1人分を「右手 ソ ／ 脇 ミ」のような読める文にする
+TOREI.layoutText = function (slot) {
+  const parts = [];
+  if (slot.hands[1]) parts.push(`右手 ${slot.hands[1].label}`);
+  if (slot.hands[0]) parts.push(`左手 ${slot.hands[0].label}`);
+  for (const r of slot.waki) parts.push(`脇 ${r.label}`);
+  for (const r of slot.stand) parts.push(`スタンド ${r.label}`);
+  return parts.length ? parts.join(" ／ ") : "手ぶら";
+};
+
 TOREI.cueSheet = function (result, melody, cfg, perfId) {
   const handName = ["左手", "右手"];
   const spb = 60 / melody.bpm;

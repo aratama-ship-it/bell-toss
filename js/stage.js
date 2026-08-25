@@ -160,6 +160,13 @@ TOREI.stage = (() => {
     ctx.fill();
   }
 
+  // labels: 手・脇・スタンドにあるリングへ音名を添えるか。
+  // リングは音高の色で描き分けているだけなので、止まっている間は文字でも読めた方がよい
+  // （開演時に誰が何を持つのかを確かめる用途。2026-08-25 本人要望）。
+  // 動いている間は出さない。飛球が増えると文字が重なって読めなくなるため。
+  let showLabels = false;
+  function setLabels(on) { showLabels = !!on; }
+
   function render(t) {
     if (!scene) return;
     const canvas = document.getElementById("stage");
@@ -332,6 +339,18 @@ TOREI.stage = (() => {
       }
       if (pos.seg.loc === "waki") drawWakiRing(ctx, pos.x, pos.y, r.midi);
       else drawRing(ctx, pos.x, pos.y, r.midi, 11);
+      if (showLabels && pos.seg.kind !== "air") {
+        ctx.font = "bold 10px 'Hiragino Sans', sans-serif";
+        ctx.textAlign = "center";
+        // 背景の線とぶつかっても読めるよう、白で縁取ってから塗る
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.strokeText(r.label, pos.x, pos.y - 15);
+        ctx.fillStyle = TOREI.pitchColor(r.midi, 1);
+        ctx.fillText(r.label, pos.x, pos.y - 15);
+        ctx.textAlign = "left";
+        ctx.lineWidth = 1;
+      }
     }
 
     // 脇にリングを挟んでいる演者には「脇」ラベル
@@ -374,5 +393,5 @@ TOREI.stage = (() => {
     }
   }
 
-  return { prepare, render, renderSolo };
+  return { prepare, render, renderSolo, setLabels };
 })();

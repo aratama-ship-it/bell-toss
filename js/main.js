@@ -79,8 +79,10 @@
     TOREI.timeline.buildGutter(state, () => recompute());
     TOREI.nav.drawRuler();
     TOREI.stage.prepare(state);
+    TOREI.stage.setLabels(!playing);
     TOREI.stage.render(state.pos);
     renderSummary();
+    renderStartLayout();
     renderWarnings();
     buildHighlightEls();
     buildCueSheet();
@@ -127,6 +129,15 @@
     cueLastIdx = -1;
     if (!state.result) { body.innerHTML = ""; return; }
     const rows = TOREI.cueSheet(state.result, state.melody, state.cfg, cuePerf);
+    // Qシートの冒頭に「開演時の構え」を出す。演者はこれを見て舞台に立つので、
+    // 1行目が「何を持って始めるか」でないと使えない（2026-08-25 本人要望）。
+    const mySlot = TOREI.initialLayout(state.result, state.cfg.nPerformers)[cuePerf];
+    let startEl = null;
+    if (mySlot) {
+      startEl = document.createElement("p");
+      startEl.className = "cue-start";
+      startEl.innerHTML = `<b>開始時の持ち方</b> ${TOREI.layoutText(mySlot)}`;
+    }
     const table = document.createElement("table");
     table.className = "cue-table";
     table.innerHTML = "<thead><tr><th>小節</th><th>時刻</th><th>手</th><th>すること</th></tr></thead>";
@@ -150,6 +161,7 @@
     }
     table.appendChild(tbody);
     body.innerHTML = "";
+    if (startEl) body.appendChild(startEl);
     body.appendChild(table);
     updateCueHighlight();
   }
@@ -474,6 +486,29 @@
     el.innerHTML = `${passHtml}必要リング <b>${need}本</b> ${cap} ｜ ${parts.join(" ／ ")}`;
   }
 
+  // 開演の瞬間に誰が何の音を持っているか（2026-08-25 本人要望）。
+  // 舞台のリングは音高で色分けされているだけで音名が書かれていないので、
+  // 同じ色の丸を添えて文字と絵を対応させる。位置（右手／左手／脇）まで出すのは、
+  // 演者が本番前に構えを作るのにそこまで要るため。
+  function renderStartLayout() {
+    const el = $("start-layout");
+    if (!state.result || !state.result.rings.length) { el.innerHTML = ""; return; }
+    const slots = TOREI.initialLayout(state.result, state.cfg.nPerformers);
+    const chip = (where, ring) =>
+      `<span class="sl-slot"><i class="sl-where">${where}</i>`
+      + `<span class="sl-note" style="--c:${TOREI.pitchColor(ring.midi, 0.95)}">${ring.label}</span></span>`;
+    const rows = slots.map(sl => {
+      const parts = [];
+      if (sl.hands[1]) parts.push(chip("右手", sl.hands[1]));
+      if (sl.hands[0]) parts.push(chip("左手", sl.hands[0]));
+      for (const r of sl.waki) parts.push(chip("脇", r));
+      for (const r of sl.stand) parts.push(chip("スタンド", r));
+      if (!parts.length) parts.push('<span class="sl-empty">手ぶら</span>');
+      return `<div class="sl-row"><span class="sl-perf">${TOREI.perfName(sl.perf)}</span>${parts.join("")}</div>`;
+    });
+    el.innerHTML = `<div class="sl-head">開始時の持ち方</div><div class="sl-rows">${rows.join("")}</div>`;
+  }
+
   // 警告は「読むもの」ではなく「飛ぶもの」。稽古中に破綻箇所を潰していく道具なので、
   // 1行クリックでその瞬間へシークし、楽譜も画面内へ持ってくる。
   function renderWarnings() {
@@ -573,6 +608,7 @@
     if (!state.result) return;
     const from = playStartPos();
     playing = true;
+    TOREI.stage.setLabels(false);   // 動いている間は音名を消す（飛球で重なって読めない）
     scheduleFrom(from);
     state.pos = from;
     $("btn-play").textContent = "■ 停止";
@@ -633,6 +669,7 @@
     loopTimer = null;
     if (playing) TOREI.audio.endSession();
     playing = false;
+    TOREI.stage.setLabels(true);    // 止めたら誰が何を持っているか読めるようにする
     const b = $("btn-play");
     if (b) {
       b.textContent = "▶ 再生";
@@ -1226,10 +1263,17 @@
     $("btn-bar-delete").addEventListener("click", deleteBar);
     $("btn-bar-undo").addEventListener("click", undoBarOp);
 
+    // スライダーは1回動かすたびに input が飛ぶ。スケジューラーの探索は1曲80ms前後あるので、
+    // 毎イベントで回すとドラッグが引っかかる。数値表示は即座に、再計算だけ後追いにする。
+    let slideTimer = null;
+    const recomputeSoon = () => {
+      if (slideTimer) clearTimeout(slideTimer);
+      slideTimer = setTimeout(() => { slideTimer = null; recompute(); }, 140);
+    };
     $("inp-bpm").addEventListener("input", () => {
       state.melody.bpm = Math.max(30, Math.min(200, +$("inp-bpm").value || 90));
       $("bpm-val").textContent = state.melody.bpm;
-      recompute();
+      recomputeSoon();
     });
     $("sel-meter").addEventListener("change", () => {
       // 音符の時刻は拍のまま動かさない。小節の数え方（ルーラー・読み出し・
@@ -1245,7 +1289,7 @@
       state.cfg.flight = +$("inp-flight").value;
       $("flight-val").textContent = state.cfg.flight.toFixed(2);
       updateFlightHeight();
-      recompute();
+      recomputeSoon();
     });
     $("inp-waki").addEventListener("change", () => {
       state.cfg.wakiCap = Math.max(0, Math.min(3, +$("inp-waki").value || 0));
