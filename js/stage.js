@@ -304,9 +304,20 @@ TOREI.stage = (() => {
       }
       // 名札
       ctx.font = "11px 'Hiragino Sans', sans-serif";
-      ctx.fillStyle = "rgba(44,49,58,0.55)";
       ctx.textAlign = "center";
-      ctx.fillText(TOREI.perfName(i), p.x, floorY + 16);
+      // 名札はクリックで編集できる。押せる場所だと分かるよう、うっすら下線を敷く
+      const nm = TOREI.perfName(i);
+      if (!solo) {
+        const w = ctx.measureText(nm).width;
+        ctx.strokeStyle = "rgba(44,49,58,0.18)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x - w / 2, floorY + 19.5);
+        ctx.lineTo(p.x + w / 2, floorY + 19.5);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(44,49,58,0.55)";
+      ctx.fillText(nm, p.x, floorY + 16);
       ctx.textAlign = "left";
     }
 
@@ -393,5 +404,23 @@ TOREI.stage = (() => {
     }
   }
 
-  return { prepare, render, renderSolo, setLabels };
+  /* 名札の位置（CSSピクセル）。舞台はcanvasなので、名前を直接クリックして
+     編集できるようにするには当たり判定を外へ出す必要がある（2026-08-26 本人要望）。
+     setupCanvas がcanvasのCSS寸法を W×H に合わせているので、描画座標＝CSS座標。 */
+  function nameBoxes() {
+    if (!scene) return [];
+    return scene.perfs.map((p, i) => ({
+      perf: i, w: 76, h: 20,
+      x: p.x - 38,                 // fillText は textAlign=center で p.x に描いている
+      y: scene.floorY + 16 - 11,   // ベースラインの少し上から
+    }));
+  }
+  function nameAt(x, y) {
+    for (const b of nameBoxes()) {
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+    }
+    return null;
+  }
+
+  return { prepare, render, renderSolo, setLabels, nameBoxes, nameAt };
 })();

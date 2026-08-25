@@ -112,6 +112,52 @@
     if (soloOpen) $("solo-title").textContent = `${TOREI.perfName(soloPerf)} の動き`;
   }
 
+  /* 舞台の名札を直接クリックして書き換える（2026-08-26 本人要望）。
+     canvasには入力欄を置けないので、名札と同じ位置にHTMLのinputを浮かせて重ねる。
+     舞台の座標＝CSSピクセル（setupCanvasがcanvasのCSS寸法を合わせている）なので、
+     stage.nameBoxes() の値をそのまま left/top に使える。 */
+  function setupStageRename() {
+    const canvas = $("stage");
+    const box = $("stage-name");
+    let editing = null;
+
+    const close = (commit) => {
+      if (editing == null) return;
+      const i = editing, v = box.value;
+      editing = null;
+      box.style.display = "none";
+      if (commit) applyRename(i, v);
+    };
+    const open = (b) => {
+      editing = b.perf;
+      box.value = TOREI.perfName(b.perf);
+      box.style.left = b.x + "px";
+      box.style.top = b.y + "px";
+      box.style.width = b.w + "px";
+      box.style.height = b.h + "px";
+      box.style.display = "block";
+      box.focus();
+      box.select();
+    };
+
+    canvas.addEventListener("click", (ev) => {
+      const r = canvas.getBoundingClientRect();
+      const hit = TOREI.stage.nameAt(ev.clientX - r.left, ev.clientY - r.top);
+      if (hit) open(hit); else close(true);
+    });
+    // 名札の上ではカーソルを変えて「押せる」と分かるようにする
+    canvas.addEventListener("mousemove", (ev) => {
+      const r = canvas.getBoundingClientRect();
+      canvas.style.cursor = TOREI.stage.nameAt(ev.clientX - r.left, ev.clientY - r.top) ? "text" : "";
+    });
+    box.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); close(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); close(false); }
+      ev.stopPropagation();   // 楽譜のキー操作へ流さない
+    });
+    box.addEventListener("blur", () => close(true));
+  }
+
   function drawAll() {
     TOREI.pianoroll.draw(state);
     TOREI.pianoroll.drawGutter(state);
@@ -1244,6 +1290,7 @@
   }
 
   function init() {
+    setupStageRename();   // 舞台の名札をクリックで編集（2026-08-26）
     const sel = $("sel-preset");
     // 4人以上前提の曲は選べなくする（2026-08-23 本人指示）。データ自体は
     // TOREI.SONGS / tools/analyze.mjs 側にそのまま残るので、後で戻すのも解析も可能
