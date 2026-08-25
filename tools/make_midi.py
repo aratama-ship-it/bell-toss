@@ -500,7 +500,7 @@ SONGS = [
         "id": "bunbun",
         "name": "ぶんぶんぶん ※3人・2拍子",
         "bpm": 60, "beatsPerBar": 2, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.0, "maxDup": 1,
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 1.05, "maxDup": 1,
         "desc": "★ボヘミア民謡。2/4拍子・原曲の12小節形。ドレミファソの5音高のみ。"
                 "Yahoo知恵袋のドレミ譜で照合（ソファミ レミファレド…）。"
                 "8分音符は0.5拍で書く（2026-08-23修正）。"
