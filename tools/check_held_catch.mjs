@@ -26,7 +26,7 @@ import fs from "node:fs"; import vm from "node:vm"; import path from "node:path"
 const ROOT = process.cwd();
 globalThis.window = globalThis;
 globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-for (const f of ["js/presets.js","js/songs.js","js/scheduler.js"])
+for (const f of ["js/presets.js","js/songs.js", "js/seeds.js","js/scheduler.js"])
   vm.runInThisContext(fs.readFileSync(path.join(ROOT,f),"utf8"),{filename:f});
 
 const R = (t) => Math.round(t * 1e6) / 1e6;
@@ -36,6 +36,7 @@ const tooTight = [];
 for (const s of TOREI.SONGS) {
   const cfg = {nPerformers:s.performers||3, flight:s.flight||1.2, wakiCap:1, maxDup:2,
                allowShake:true, standTime:s.standTime||2.0, passMode:s.passMode||"more"};
+  cfg.seed = (TOREI.SEEDS || {})[s.id];   // 配布される編成そのものを検査する
   const r = TOREI.schedule({bpm:s.bpm,beatsPerBar:s.beatsPerBar,notes:s.notes}, cfg);
   const evs = [];
   for (const a of r.actions) {

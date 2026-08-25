@@ -31,7 +31,7 @@ const EPS = 1e-6;
 function loadTorei() {
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-  for (const f of ["js/presets.js", "js/songs.js", "js/scheduler.js"]) {
+  for (const f of ["js/presets.js", "js/songs.js", "js/seeds.js", "js/scheduler.js"]) {
     const p = path.join(ROOT, f);
     vm.runInThisContext(fs.readFileSync(p, "utf8"), { filename: p });
   }
@@ -44,6 +44,9 @@ function loadTorei() {
 // アプリで曲を選んだ直後とまったく同じ条件で回すため、ここはアプリ側と揃える。
 function cfgFor(song) {
   return {
+    // 配布時に確定させた編成をそのまま測る。ここを空にすると、ツールの数字と
+    // 実際に配られる曲の中身がズレる（2026-08-25 二段構えの導入に伴い追加）。
+    seed: (globalThis.TOREI && globalThis.TOREI.SEEDS) ? globalThis.TOREI.SEEDS[song.id] : undefined,
     nPerformers: song.performers || 3,
     flight: song.flight || 1.2,
     wakiCap: song.wakiCap ?? 1,
@@ -281,7 +284,7 @@ function printSeedScan(song, TOREI, n) {
   console.log(`${song.name}: ${n}シードの直接スキャン`);
   console.log(`  書かれた和音 ${spots}箇所 ／ 成立数 最小 ${Math.min(...hits)} ・ 平均 ${avg.toFixed(1)} ・ 最大 ${Math.max(...hits)}`);
   console.log(`  振り 延べ${shakes} ／ 不可能 延べ${fails}`);
-  console.log("  ※実際に採用されるのは TOREI.schedule が20シードから選ぶ最良の1つ。");
+  console.log("  ※配布される編成は js/seeds.js で確定済み（tools/optimize.mjs が選定）。");
   console.log("  　単独シードには破綻するものが混ざるのが普通（例: 五音の橋も60シード中に不可能46件を含む）。");
   console.log("  　見るべきは平均と最大。平均が箇所数に近いほど、和音は運ではなく構造で出ている。");
   console.log("");

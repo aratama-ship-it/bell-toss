@@ -39,51 +39,74 @@ TOREI.SCHED = {
 
 /* 乱択リスタート: コストに微小なジッターを加えて複数回走らせ、
    (不可能数, 振り数, 和音の欠け, リング数, パス率) が最良の結果を採用する。シード固定で再現可能。 */
+/* 編成の良し悪しを1つの数値にする。小さいほど良い。
+   ★ブラウザの探索（TOREI.schedule）と、配布用の編成を選ぶ tools/optimize.mjs の
+   両方がこの関数を使う。別々に持つと必ず食い違い、「ツールが選んだ最良」と
+   「画面に出る編成」がズレるため。 */
+TOREI.scoreResult = function (r, chordSpots, cfg) {
+  const fails = r.noteResults.filter(x => x && x.kind === "fail").length;
+  const shakes = r.noteResults.filter(x => x && x.kind === "shake").length;
+  const throws = r.actions.filter(a => a.type === "throw");
+  const passes = throws.filter(a => a.pass).length;
+  const passRate = throws.length ? passes / throws.length : 0;
+  // パスの重みは5→8（2026-08-23 本人要望「演者間のパスをよしとする重み付けを」）
+  const passBonus = cfg.passMode === "off" ? 0 : passRate * 8;
+  // パス率20%は本人が定めた下限（2026-08-25）。比例ボーナスだけだと、
+  // 所作やリング数の小さな得と引き換えに下限を割る編成が選ばれうる。
+  const passFloor = (cfg.passMode === "off" || !throws.length) ? 0
+    : Math.max(0, 0.20 - passRate) * 100;
+  const chordMiss = chordSpots - r.actions.filter(a => a.chordRole === "held").length;
+  // 無駄な所作（2026-08-25 本人指摘）。持ち替えと開演前の脇は音楽的に何も生まない。
+  // 曲中の脇は減点しない——3本以上を持つ演者には正当な技法で、減点するとパス率を大きく削る
+  // （実測: グーチョキパー75%→31%、ジングルベル69%→37%）。
+  const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand").length;
+  const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
+  const fuss = handoffs * 0.5 + prepWaki * 0.4;
+  // 冒頭の一音は最も目を引くので、演者間の受け渡しで始めたい（2026-08-25 本人方針）。
+  // 成立や和音を覆さない程度の軽い重みにとどめる。
+  const firstCatch = r.actions.find(a => a.type === "catch" && a.noteIdx === 0);
+  const openMiss = (cfg.passMode === "off" || !firstCatch || firstCatch.pass) ? 0 : 0.6;
+  return {
+    score: fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1
+      + fuss + passFloor + openMiss - passBonus,
+    fails, shakes, chordMiss, passRate, rings: r.rings.length,
+    handoffs, prepWaki, openPass: !!(firstCatch && firstCatch.pass),
+  };
+};
+
+// 楽譜に書かれた和音（同時刻2音以上）の箇所数
+TOREI.countChordSpots = function (melody) {
+  const m = new Map();
+  for (const n of melody.notes) { const k = n.beat.toFixed(6); m.set(k, (m.get(k) || 0) + 1); }
+  let c = 0;
+  for (const v of m.values()) if (v >= 2) c++;
+  return c;
+};
+
 TOREI.schedule = function (melody, cfg) {
-  // 楽譜に書かれた和音（同時刻2音以上）の箇所数。採点で「和音が消えていないか」を見る。
-  // パスを強めると「静かに持つ」状態が減って保持キャッチ和音が消えるため、採点で守る
-  // （2026-08-23 パス重み強化と同時に導入。これが無いと和音を潰すシードが選ばれる）。
-  const chordSpots = (() => {
-    const m = new Map();
-    for (const n of melody.notes) { const k = n.beat.toFixed(6); m.set(k, (m.get(k) || 0) + 1); }
-    let c = 0;
-    for (const v of m.values()) if (v >= 2) c++;
-    return c;
-  })();
+  // ★確定済みの編成（cfg.seed）があるなら、探索せずそれを再現する。
+  // 曲を配って稽古する以上、編成は毎回同じでなければならない。ブラウザで毎回探索し直すと、
+  // スケジューラーに手を入れるたびに配布済みの曲の振り付けが黙って変わってしまう
+  // （2026-08-25 本人提案「楽曲ごとに先に最適化して固める」への対応）。
+  // 楽譜を編集したら呼び出し側が seed を捨てる＝そこからは通常の探索に戻る。
+  if (cfg.seed != null) return TOREI._scheduleOnce(melody, cfg, cfg.seed);
+
+  const chordSpots = TOREI.countChordSpots(melody);
   let best = null, bestScore = Infinity;
-  // 探索するシード数。準備配置(prepHandFirst)を探索次元に加えて組み合わせが
-  // 3(avoidLevel)×2(passAggressive)×2(prepHandFirst)=12通りになったため、20では
-  // 各組み合わせを1〜2回しか引けず、良い解を取りこぼしていた。48まで広げると
-  // 各組み合わせを4回試せる（実測: 全34曲の平均パス率 74.0%→81.0%、不可0・振り0は維持）。
-  // 1曲あたり約80ms。スライダー操作はデバウンスしてあるので体感には出ない。
-  for (let seed = 0; seed < 48; seed++) {
+  // ランダム再スタート法なので、探索量がそのまま質になる。
+  // 実測（全34曲・2026-08-25）: 48→平均パス82.7% / 200→86.7% / 600→87.7% / 1500→88.3%。
+  // ぶんぶんぶんは 48→45% だが 200→88%（冒頭3音すべてパス）と劇的に変わる。
+  // ただし1曲あたりの時間も比例して伸びる（200で最長1.3秒＝編集中の再計算には重い）。
+  // そこで対話中は「控えめな上限＋十分に良ければ即打ち切り」、
+  // 配布する編成は tools/optimize.mjs が大きな探索量で選んで固める、の二段構えにする。
+  const budget = cfg.searchBudget || 200;
+  const goodEnough = cfg.passMode === "off" ? 0 : 0.6;
+  for (let seed = 0; seed < budget; seed++) {
     const r = TOREI._scheduleOnce(melody, cfg, seed);
-    const fails = r.noteResults.filter(x => x && x.kind === "fail").length;
-    const shakes = r.noteResults.filter(x => x && x.kind === "shake").length;
-    const throws = r.actions.filter(a => a.type === "throw");
-    const passes = throws.filter(a => a.pass).length;
-    // 成立を最優先し、同点ならパスが多く・和音が残り・リングが少ない編成を選ぶ。
-    // パス率の重みは5→8（2026-08-23 本人要望「演者間のパスをよしとする重み付けを」）
-    const passRate = throws.length ? passes / throws.length : 0;
-    const passBonus = cfg.passMode === "off" ? 0 : passRate * 8;
-    // パス率20%は本人が定めた下限（2026-08-25）。比例ボーナスだけだと、
-    // 所作やリング数の小さな得と引き換えに下限を割る編成が選ばれうる。
-    // 下限を割った分だけ急に重くして「まず20%を確保してから他を最適化する」順序にする。
-    const passFloor = (cfg.passMode === "off" || !throws.length) ? 0
-      : Math.max(0, 0.20 - passRate) * 100;
-    const chordMiss = chordSpots - r.actions.filter(a => a.chordRole === "held").length;
-    // 無駄な所作を減らす（2026-08-25 本人指摘）。持ち替えと脇の出し入れは
-    // 音楽的には何も生まないのに手数と時間だけ食う。成立・和音より弱く、
-    // パス率と競える程度の重みにして、同じ成立度なら所作の少ない編成を選ばせる。
-    const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand").length;
-    const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
-    // 曲中の脇の出し入れは減点しない。本人が挙げたのは「準備の脇」と「持ち替え」で、
-    // 曲中の脇は3本以上を扱う演者には正当な技法。ここを減点するとパス率を大きく削る
-    // （実測: グーチョキパー75%→31%、ジングルベル69%→37%）。
-    const fuss = handoffs * 0.5 + prepWaki * 0.4;
-    const score = fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1 + fuss + passFloor - passBonus;
-    if (score < bestScore) { bestScore = score; best = r; }
-    if (fails === 0 && shakes === 0 && chordMiss === 0 && passes === throws.length) break;
+    const m = TOREI.scoreResult(r, chordSpots, cfg);
+    if (m.score < bestScore) { bestScore = m.score; best = r; }
+    if (m.fails === 0 && m.shakes === 0 && m.chordMiss === 0 && m.openPass
+        && (m.passRate === 1 || m.passRate >= goodEnough)) break;
   }
   return best;
 };

@@ -42,8 +42,31 @@
 
   /* ---------- 再計算と描画 ---------- */
 
+  // 確定済み編成（seed）を使ってよいかの判定。
+  // 曲を読み込んだ時点の楽譜・設定に対してだけ有効で、1音でも動かしたら捨てる。
+  // 「編集した箇所を直す」のを忘れる事故が起きないよう、個々の編集操作に手を入れるのではなく
+  // 署名を突き合わせて自動で外す（編集の入口はドラッグ・キー・小節操作・MIDI読込と多い）。
+  let seedSig = null, frozenSeed = null;
+  function stateSig() {
+    const c = state.cfg;
+    return JSON.stringify([
+      state.melody.bpm, state.melody.beatsPerBar,
+      state.melody.notes.map(n => [n.beat, n.midi]),
+      c.nPerformers, c.flight, c.wakiCap, c.maxDup, c.allowShake, c.standTime, c.passMode,
+    ]);
+  }
+  function freezeSeed(seed) {
+    frozenSeed = seed == null ? null : seed;
+    state.cfg.seed = frozenSeed;
+    seedSig = frozenSeed == null ? null : stateSig();
+  }
+
   function recompute() {
     stopPlayback();
+    // 楽譜か設定が変わっている間だけ、確定編成を外して探索に切り替える。
+    // 編集を元に戻せば確定編成へ復帰する（外しっぱなしにすると、戻したのに
+    // 配布版と違う振り付けのまま、という分かりにくい状態になる）。
+    if (frozenSeed != null) state.cfg.seed = (stateSig() === seedSig) ? frozenSeed : null;
     // 小節操作以外の編集が入ったら「取り消す」を無効化する。
     // 古いスナップショットで新しい編集ごと巻き戻す事故を防ぐため
     if (!inBarOp && typeof invalidateBarUndo === "function" && barSnapshot) invalidateBarUndo();
@@ -1145,6 +1168,9 @@
     $("inp-dup").value = state.cfg.maxDup;
     state.pos = 0;
     setLoop(null);
+    // 配布用に確定させた編成があれば、探索せずそれを再現する（tools/optimize.mjs が選定）。
+    // 稽古する振り付けが開くたびに変わらないようにするのが目的で、速さは副次的な利点。
+    freezeSeed((TOREI.SEEDS || {})[p.id]);
     recompute();
     scrollToSongHead();
   }
