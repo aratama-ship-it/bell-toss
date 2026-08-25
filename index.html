@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.25-4</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.25-5</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -111,6 +111,13 @@
           <option value="0.3">避ける</option>
         </select>
         <i>隣でない演者へ投げる距離の長いパス</i></label>
+      <label>脇側の腕を使わない
+        <select id="eff-arm">
+          <option value="0">気にしない</option>
+          <option value="0.1" selected>ほどほど</option>
+          <option value="0.4">強く避ける</option>
+        </select>
+        <i>脇に挟んでいる側の腕でのキャッチを避ける</i></label>
       <label>リングの本数
         <select id="eff-ring">
           <option value="0.02">気にしない</option>
@@ -212,14 +219,14 @@
 <script src="js/presets.js?v=3"></script>
 <script src="js/songfile.js?v=1"></script>
 <script src="js/songs.js?v=27"></script>
-  <script src="js/seeds.js?v=2"></script>
-<script src="js/scheduler.js?v=13"></script>
+  <script src="js/seeds.js?v=3"></script>
+<script src="js/scheduler.js?v=14"></script>
 <script src="js/audio.js"></script>
 <script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=9"></script>
-<script src="js/main.js?v=29"></script>
+<script src="js/main.js?v=30"></script>
 </body>
 </html>

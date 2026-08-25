@@ -34,6 +34,14 @@ TOREI.SCHED = {
   // 投げ→0.50秒・脇→0.35秒となり、両方を満たす。
   T_RECOVER: 0.35,
   T_HANDOFF: 0.4,    // 逆の手へ持ち替える
+  // ★脇にリングを挟んでいる側の手へ渡す場合（2026-08-25 本人指摘）。
+  // その腕はすでに止まっているので、渡すだけならほとんど時間を食わない、とのこと。
+  // この動きは「フリーな腕を空けてキャッチする」ための正しい手順なので、安く扱う。
+  T_HANDOFF_PARK: 0.2,
+  // 脇を使っている側の腕でキャッチするときの割高さ（計画時のコスト。禁止ではなく回避）。
+  // 実測で釣り合いの良い点（全34曲・探索800）: 0.2→397回/パス84.9%、0.5→346回/83.8%、
+  // 0.8→295回/81.0%。0.5より上げても回数の減りに対してパス率の代償が大きい。
+  WAKI_ARM_COST: 0.5,
   PREP: -600,        // 準備時間の起点（曲全体を遡れるよう十分に昔）
 };
 
@@ -60,6 +68,10 @@ TOREI.EFFORT = {
   evenLoad: 3.0,     // 演者間の偏り（0〜1）にかける減点
   farPass: 0.05,     // 隣でない演者へのパス1回あたりの減点
   ringCost: 0.1,     // リング1本あたりの減点（本数を絞りたいほど上げる）
+  // 脇を使っている側の腕でキャッチ／取り出しをした1回あたりの減点。
+  // 0.1が釣り合いの良い点（実測: 0で390回・0.1で301回とパス率を落とさず減り、
+  // 0.3以上にすると回数は減るがパス率が1〜2pt落ちる）。
+  wakiArm: 0.1,
 };
 
 /* 上の指標を実測する。ブラウザの採点・最適化ツール・点検ツールが同じ数値を見るよう1か所に置く */
@@ -73,11 +85,15 @@ TOREI.effortMetrics = function (r, cfg) {
   let tight = 0, levelChange = 0;
   for (let p = 0; p < n; p++) {
     for (let h = 0; h < 2; h++) {
-      const ts = acts.filter(a => a.perf === p && a.hand === h).map(a => a.t).sort((x, y) => x - y);
-      for (let i = 1; i < ts.length; i++) {
-        const gap = ts[i] - ts[i - 1];
+      const mine = acts.filter(a => a.perf === p && a.hand === h).sort((x, y) => x.t - y.t);
+      for (let i = 1; i < mine.length; i++) {
+        const gap = mine[i].t - mine[i - 1].t;
         // 同時刻の2件は保持キャッチ和音（1回の動作で2つ鳴る）なので窮屈ではない
-        if (gap > 1e-6 && gap < E.handGap) tight++;
+        if (!(gap > 1e-6 && gap < E.handGap)) continue;
+        // 脇側の手へ渡す動作は「ほとんど時間を食わない」（2026-08-25 本人談）。
+        // 腕を空けるための正しい手順なので、これが絡む間隔は窮屈と数えない。
+        if (mine[i].toParked || mine[i - 1].toParked) continue;
+        tight++;
       }
       const seq = throws.filter(a => a.perf === p && a.hand === h)
         .sort((x, y) => x.t - y.t).map(a => TOREI.throwLevel(a.flight));
@@ -89,8 +105,21 @@ TOREI.effortMetrics = function (r, cfg) {
   const hi = Math.max(...per, 1);
   const imbalance = per.length > 1 ? (hi - Math.min(...per)) / hi : 0;
   const tooHigh = throws.filter(a => TOREI.throwLevel(a.flight) > E.maxLevel).length;
+  // 脇にリングを挟んでいる側の腕でのキャッチ（2026-08-25 本人指摘）。
+  // 挟んだ側の腕は自由が利かないので、できる限りフリーな腕で受けたい。
+  const wakiIv = [];
+  for (const a of r.actions) {
+    if (a.type === "store" && a.to === "waki") wakiIv.push({ perf: a.perf, side: a.hand, from: a.t + a.dur, to: Infinity });
+  }
+  for (const a of r.actions) {
+    if (a.type !== "pickup" || a.from !== "waki") continue;
+    const iv = wakiIv.find(w => w.perf === a.perf && w.to === Infinity && w.from <= a.t + 1e-6);
+    if (iv) iv.to = a.t;
+  }
+  const armCatches = r.actions.filter(a => (a.type === "catch" || a.type === "pickup") &&
+    wakiIv.some(w => w.perf === a.perf && w.side === a.hand && w.from < a.t + 1e-6 && a.t < w.to - 1e-6)).length;
   const farPasses = throws.filter(a => a.pass && Math.abs(a.perf - a.catchPerf) >= 2).length;
-  return { tight, levelChange, imbalance, tooHigh, farPasses, perActions: per };
+  return { tight, levelChange, imbalance, tooHigh, farPasses, armCatches, perActions: per };
 };
 
 /* 編成の良し悪しを1つの数値にする。小さいほど良い。
@@ -113,7 +142,8 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   // 無駄な所作（2026-08-25 本人指摘）。持ち替えと開演前の脇は音楽的に何も生まない。
   // 曲中の脇は減点しない——3本以上を持つ演者には正当な技法で、減点するとパス率を大きく削る
   // （実測: グーチョキパー75%→31%、ジングルベル69%→37%）。
-  const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand").length;
+  // 脇側の手へ渡すのはキャッチする腕を空けるための正しい手順なので、無駄には数えない
+  const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand" && !a.toParked).length;
   const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
   const fuss = handoffs * 0.5 + prepWaki * 0.4;
   // 冒頭の一音は最も目を引くので、演者間の受け渡しで始めたい（2026-08-25 本人方針）。
@@ -125,7 +155,8 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   const E = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
   const em = TOREI.effortMetrics(r, cfg);
   const effort = em.tight * E.gapCost + em.tooHigh * E.levelCost
-    + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass;
+    + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass
+    + em.armCatches * E.wakiArm;
   return {
     score: fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * E.ringCost
       + fuss + passFloor + openMiss + effort - passBonus,
@@ -366,7 +397,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
           actions.push({ type: "store", perf: perf.id, hand: handSlot % 2, ring: r.id,
             t: cursor + T_STAND, dur: C.T_WAKI, to: "waki", midi: r.midi, prep: true });
           perf.hands[handSlot % 2].busy.push([cursor + T_STAND, cursor + T_STAND + C.T_WAKI]);
-          wakiEnter(perf, r.id, cursor + T_STAND + C.T_WAKI, null);
+          wakiEnter(perf, r.id, cursor + T_STAND + C.T_WAKI, null, handSlot % 2);
           r.loc = "waki";
           r.hand = null;
         } else {
@@ -415,8 +446,18 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     }
     return n < cfg.wakiCap;
   }
-  function wakiEnter(perf, ringId, from, to) {
-    perf.wakiIv.push({ ring: ringId, from, to: to == null ? Infinity : to });
+  // ★脇は左右のどちらかに挟む（2026-08-25 本人指摘）。挟んだ側の腕は自由が利かないので、
+  // その側の手でキャッチするのは避けたい。どちらに挟んだかを記録しないとこれが表現できない。
+  // 挟む動作をした手の側＝挟まれる側とする（反対の脇へ回り込んで挟むことはしない）。
+  function wakiEnter(perf, ringId, from, to, side) {
+    perf.wakiIv.push({ ring: ringId, from, to: to == null ? Infinity : to, side: side == null ? 0 : side });
+  }
+  // 時刻 t にその側の脇がふさがっているか
+  function wakiSideBusy(perf, side, t) {
+    for (const iv of perf.wakiIv) {
+      if (iv.side === side && iv.from < t + EPS && t < iv.to - EPS) return true;
+    }
+    return false;
   }
   function wakiLeave(perf, ringId, t) {
     for (const iv of perf.wakiIv) {
@@ -480,7 +521,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       if (ready > acqStart0 + EPS) return null;
 
       // 別リングを持っていたら先に置く（置き先: 脇に空きがあれば脇、なければ台）
-      let storeDur = 0, storeTo = null, storedPoss = null;
+      let storeDur = 0, storeTo = null, storedPoss = null, toParkedArm = false;
       const conf0 = possConflict(hand, acqStart0, chainEnd, ring.id);
       if (conf0.kind === "blocked") return null;
       if (conf0.kind === "storable") {
@@ -488,7 +529,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         // 置き先の優先順: 逆の手へ持ち替え(速い) → 脇(1本まで) → スタンド(遅い)
         const otherIdx = 1 - handIdx;
         const other = perf.hands[otherIdx];
-        const hs = acqStart0 - C.T_HANDOFF;
+        // 逆の手が「脇を使っている側」なら、その腕はもう止まっている。渡すだけなら速い。
+        const parkDur = wakiSideBusy(perf, otherIdx, acqStart0) ? C.T_HANDOFF_PARK : C.T_HANDOFF;
+        const hs = acqStart0 - parkDur;
         // ★受け側の手を「以後ずっと空いているか」で検査する（2026-08-23 本人指摘への対応）。
         // リングを持っている手でキャッチすると衝撃で両方鳴ってしまう（＝意図しない和音）。
         // 持ち替えたリングがいつ受け手を出るかは将来の計画次第で確定できない。
@@ -498,7 +541,8 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         if (isFree(other, hs, Infinity)
             && possConflict(other, hs, Infinity, storedPoss.ring).kind === "none") {
           storeTo = "otherhand";
-          storeDur = C.T_HANDOFF;
+          storeDur = parkDur;
+          toParkedArm = parkDur === C.T_HANDOFF_PARK;
         } else if (wakiHasRoom(perf, acqStart0 - C.T_WAKI, null)) {
           storeTo = "waki";
           storeDur = C.T_WAKI;
@@ -516,7 +560,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // スタンドの出し入れは体ごと動く＝その間ジャグリングできない
       if (aFrom === "stand" && !bodyFree(perf, acqStart0, acqStart0 + aDur)) return null;
       if (storeTo === "stand" && !bodyFree(perf, chainStart, chainStart + storeDur)) return null;
-      return { storeDur, storeTo, storedPoss, acqStart: acqStart0, lead, f, throwTime };
+      return { storeDur, storeTo, storedPoss, toParkedArm, acqStart: acqStart0, lead, f, throwTime };
     };
 
     // 経路の探索: 「最初に見つかった1つ」ではなく候補を集めて最善を選ぶ。
@@ -581,7 +625,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       (b.storeDur + b.acqDur + b.lead * 0.05 + (b.restock ? 0.5 : 0)));
     const found = opts[0];
 
-    const { storeDur, storeTo, storedPoss, acqStart, lead, f, throwTime } = found;
+    const { storeDur, storeTo, storedPoss, toParkedArm, acqStart, lead, f, throwTime } = found;
 
     // キャッチ手の候補: 自分の両手 ＋（パッシング有効なら）他の演者の手。
     // 投げ渡し(パス)はリングの持ち主がキャッチした演者に移る。
@@ -631,7 +675,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // 投げた手が空いているならその手で受けるのが自然で、持ち替えも要らない。
       // 逆の手を完全に禁じると交差の動きが消えるので、わずかな差にとどめて必要な時は選べるようにする。
       const selfCost = c === handIdx ? 0.2 : 0.22;
-      const cc = (isSelf ? selfCost : passCost) + q.load * 0.3 + busySoon;
+      // ★脇にリングを挟んでいる側の腕でキャッチするのは避ける（2026-08-25 本人指摘）。
+      // その腕は自由が利かない。禁止ではなく割高にして、他に手が無ければ使う。
+      const armCost = wakiSideBusy(q, c, t) ? C.WAKI_ARM_COST : 0;
+      const cc = (isSelf ? selfCost : passCost) + q.load * 0.3 + busySoon + armCost;
       if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc, chord: isChord };
     }
     if (!bestCatch) return null;
@@ -640,7 +687,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       kind: "toss", ring, perf, handIdx, isNew,
       catchPerf: bestCatch.q, catchHand: bestCatch.c,
       chordRing: bestCatch.chord ? forceCatch.chordRing : null,
-      storeDur, storeTo, storedPoss,
+      storeDur, storeTo, storedPoss, toParkedArm,
       acqDur: found.acqDur, acqFrom: found.acqFrom, acqStart,
       restock: found.restock || null,
       throwTime, flight: f,
@@ -668,7 +715,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     // 逆の手は「以後ずっと空いているか」で検査（tryWindowのotherhandと同じ理由。両鳴り防止）
     if (isFree(other, after, Infinity)
         && possConflict(other, after, Infinity, ringId).kind === "none") {
-      return { perf, handIdx, ringId, to: "otherhand", start: after, dur: C.T_HANDOFF, cost: C.T_HANDOFF };
+      // 逆の手が脇を使っている側なら、その腕は止まっているので渡すのは速い（本人指摘）
+      const d = wakiSideBusy(perf, otherIdx, after) ? C.T_HANDOFF_PARK : C.T_HANDOFF;
+      return { perf, handIdx, ringId, to: "otherhand", start: after, dur: d, cost: d, toParked: d === C.T_HANDOFF_PARK };
     }
     if (wakiHasRoom(perf, after, null)) {
       return { perf, handIdx, ringId, to: "waki", start: after, dur: C.T_WAKI, cost: C.T_WAKI };
@@ -793,7 +842,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       bodyOccupy(perf, ps, ps + T_STAND); // 台への往復は体ごと
       rHand.busy.push([ps + T_STAND, ps + T_STAND + C.T_WAKI]);
       rHand.poss.push({ ring: ring.id, from: ps, to: ps + T_STAND + C.T_WAKI });
-      wakiEnter(perf, ring.id, ps + T_STAND + C.T_WAKI, acqStart + C.T_WAKI);
+      wakiEnter(perf, ring.id, ps + T_STAND + C.T_WAKI, acqStart + C.T_WAKI, plan.restock.hand);
       ring.loc = "waki";
       ring.readyAt = ps + T_STAND + C.T_WAKI;
     }
@@ -802,7 +851,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     if (plan.storeDur > 0 && plan.storedPoss) {
       const stored = rings[plan.storedPoss.ring];
       actions.push({ type: "store", perf: perf.id, hand: plan.handIdx, ring: stored.id,
-        t: storeStart, dur: plan.storeDur, to: plan.storeTo, midi: stored.midi });
+        t: storeStart, dur: plan.storeDur, to: plan.storeTo, midi: stored.midi,
+        // 脇を使っている側の手へ渡した＝キャッチする腕を空けるための正しい手順。
+        // 採点では「無駄な持ち替え」と区別する（2026-08-25 本人指摘）。
+        toParked: !!plan.toParkedArm });
       if (plan.storeTo === "stand") bodyOccupy(perf, storeStart, storeStart + plan.storeDur);
       else hand.busy.push([storeStart, storeStart + plan.storeDur]);
       closePoss(hand, stored.id, storeStart);
@@ -817,7 +869,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       } else {
         stored.loc = plan.storeTo;
         stored.hand = null;
-        if (plan.storeTo === "waki") wakiEnter(perf, stored.id, storeStart + plan.storeDur, null);
+        if (plan.storeTo === "waki") wakiEnter(perf, stored.id, storeStart + plan.storeDur, null, plan.handIdx);
       }
     }
 
@@ -909,7 +961,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         ring.loc = park;
         ring.hand = null;
         ring.readyAt = after + dur;
-        if (park === "waki") wakiEnter(holdPerf, ring.id, after + dur, null);
+        if (park === "waki") wakiEnter(holdPerf, ring.id, after + dur, null, holdIdx);
       }
     }
   }
@@ -919,7 +971,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     const perf = sep.perf, handIdx = sep.handIdx, hand = perf.hands[handIdx];
     const ring = rings[sep.ringId];
     actions.push({ type: "store", perf: perf.id, hand: handIdx, ring: ring.id,
-      t: sep.start, dur: sep.dur, to: sep.to, midi: ring.midi });
+      t: sep.start, dur: sep.dur, to: sep.to, midi: ring.midi, toParked: !!sep.toParked });
     if (sep.to === "stand") bodyOccupy(perf, sep.start, sep.start + sep.dur);
     else hand.busy.push([sep.start, sep.start + sep.dur]);
     closePoss(hand, ring.id, sep.start);
@@ -934,7 +986,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     } else {
       ring.loc = sep.to;
       ring.hand = null;
-      if (sep.to === "waki") wakiEnter(perf, ring.id, sep.start + sep.dur, null);
+      if (sep.to === "waki") wakiEnter(perf, ring.id, sep.start + sep.dur, null, sep.handIdx);
     }
   }
 

@@ -520,6 +520,7 @@
     const acts = m.perActions.map((c, i) => `${TOREI.perfName(i)} ${c}`).join(" ／ ");
     el.innerHTML = `いまの編成: 窮屈な連続 <b>${m.tight}</b>回 ｜ 高さの変化 <b>${m.levelChange}</b>回 ｜ `
       + `高さ上限超え <b>${m.tooHigh}</b>本 ｜ 遠い演者へのパス <b>${m.farPasses}</b>回 ｜ `
+      + `脇側の腕で取る <b>${m.armCatches}</b>回 ｜ `
       + `演者ごとの動作数 ${acts}（偏り <b>${Math.round(m.imbalance * 100)}%</b>）`;
   }
 
@@ -1281,7 +1282,8 @@
     // 手の余裕・高さの上限といった稽古で使える言葉で持つ（scheduler.js の TOREI.EFFORT）。
     const effortInputs = [
       ["eff-gap", "handGap"], ["eff-level", "maxLevel"], ["eff-even", "evenLevel"],
-      ["eff-load", "evenLoad"], ["eff-far", "farPass"], ["eff-ring", "ringCost"],
+      ["eff-load", "evenLoad"], ["eff-far", "farPass"], ["eff-arm", "wakiArm"],
+      ["eff-ring", "ringCost"],
     ];
     function readEffort() {
       const e = {};
