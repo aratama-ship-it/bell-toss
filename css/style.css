@@ -168,6 +168,10 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
 #ring-summary b { color: var(--ink); font-weight: 600; }
 .cap-over { color: var(--warn); font-weight: 600; }
 .cap-ok { color: var(--brass); }
+/* 演者間パス率。目安を下回ったら警告色（リング超過と同じ扱い） */
+.pass-ok { color: var(--brass); }
+.pass-ok b, .pass-low b { font-weight: 600; }
+.pass-low { color: var(--warn); font-weight: 600; }
 
 #notice {
   border-left: 3px solid var(--brass);

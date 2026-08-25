@@ -22,6 +22,9 @@
   let saveTimer = null;
   let hlEls = [];      // 行動表の「今どの行動が進行中か」ハイライト（演者×手の数だけ）
 
+  // パス率の目安。これを下回ると ring-summary で警告色になる（2026-08-25 本人指定）
+  const PASS_TARGET = 20;
+
   const $ = (id) => document.getElementById(id);
   const spb = () => 60 / state.melody.bpm;
 
@@ -452,7 +455,16 @@
     const cap = need > capacity
       ? `<span class="cap-over">手元の上限 ${capacity}本を超過（${state.cfg.nPerformers}人 × 手2+脇${state.cfg.wakiCap}）— 演者を増やすかテンポを落としてください</span>`
       : `<span class="cap-ok">手元の上限 ${capacity}本以内</span>`;
-    el.innerHTML = `必要リング <b>${need}本</b> ${cap} ｜ ${parts.join(" ／ ")}`;
+    // パス率＝演者間で受け渡す投げの割合。ジャグリングの見どころなので常に見えるようにする
+    // （2026-08-25 本人要望）。目安20%を下回ったら警告色にする。
+    const throws = state.result.actions.filter(a => a.type === "throw");
+    const passes = throws.filter(a => a.pass).length;
+    const rate = throws.length ? Math.round((passes / throws.length) * 100) : 0;
+    const passHtml = throws.length
+      ? `<span class="${rate >= PASS_TARGET ? "pass-ok" : "pass-low"}" title="演者間で受け渡す投げの割合（自分で投げて自分で受ける分は含まない）。目安${PASS_TARGET}%以上">`
+        + `演者間パス <b>${rate}%</b>（${passes}/${throws.length}投）</span> ｜ `
+      : "";
+    el.innerHTML = `${passHtml}必要リング <b>${need}本</b> ${cap} ｜ ${parts.join(" ／ ")}`;
   }
 
   // 警告は「読むもの」ではなく「飛ぶもの」。稽古中に破綻箇所を潰していく道具なので、
