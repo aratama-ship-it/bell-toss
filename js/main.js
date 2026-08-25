@@ -25,6 +25,13 @@
   // パス率の目安。これを下回ると ring-summary で警告色になる（2026-08-25 本人指定）
   const PASS_TARGET = 20;
 
+  // 手動の音ズレ補正（秒）。Safariは outputLatency を実装しておらず、Bluetooth等の
+  // 出力遅延を自動検出できない（2026-08-25 本人報告: Safariのみ映像が音より先行）。
+  // 自動で測れないものは較正してもらうしかないので、端末ごとの設定として持つ。
+  // 曲データには含めない（環境の性質であって曲の性質ではない）。
+  let avSync = 0;
+  try { avSync = Math.max(0, Math.min(0.4, +(localStorage.getItem("torei.avSync") || 0))) || 0; } catch (e) {}
+
   const $ = (id) => document.getElementById(id);
   const spb = () => 60 / state.melody.bpm;
 
@@ -589,6 +596,7 @@
       // baseLatency（内部処理分のみ・小さく安定）へ落とす
       let lat = ctx.outputLatency || 0;
       if (!(lat >= 0) || lat > 0.5) lat = Math.min(ctx.baseLatency || 0, 0.5);
+      lat += avSync;   // 手動の音ズレ補正（Safari等、自動検出できない環境向け）
       let pos = playT0 + (ctx.currentTime - playBase) - lat;
       // 次の周を先行予約した直後は playBase が未来（境界時刻）を指す。境界を越えるまでは
       // 前の周の続きの位置として表示すると、プレイヘッドが途切れず境界を通過する。
@@ -1191,6 +1199,15 @@
     $("inp-zoom").addEventListener("input", () => zoomTo(+$("inp-zoom").value));
     $("btn-loop-bar").addEventListener("click", loopCurrentBar);
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
+    // 音ズレ補正スライダー（端末設定）
+    $("inp-avsync").value = Math.round(avSync * 1000);
+    $("avsync-val").textContent = Math.round(avSync * 1000);
+    $("inp-avsync").addEventListener("input", () => {
+      avSync = (+$("inp-avsync").value || 0) / 1000;
+      $("avsync-val").textContent = Math.round(avSync * 1000);
+      try { localStorage.setItem("torei.avSync", String(avSync)); } catch (e) {}
+    });
+
     // 演者1人分の動きモーダル
     $("solo-close").addEventListener("click", closeSolo);
     $("solo-play").addEventListener("click", soloTogglePlay);

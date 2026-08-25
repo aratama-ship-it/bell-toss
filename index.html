@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.25-1</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -66,6 +66,9 @@
       </select></label>
     <label>同音リング最大 <input type="number" id="inp-dup" min="1" max="3" value="2"> 本</label>
     <label class="check"><input type="checkbox" id="inp-shake" checked> 間に合わない音はフレーズ末でのみ振って鳴らす</label>
+    <label class="av-sync" title="イヤホンやスピーカーの遅延で映像が音より先に動くとき、映像を遅らせて合わせる。Safariは遅延を自動検出できないため手動で調整する（Bluetoothなら150〜250msが目安）。この端末にだけ保存され、曲データには含まれない">
+      音ズレ補正 <input type="range" id="inp-avsync" min="0" max="400" step="10" value="0">
+      <span id="avsync-val">0</span>ms</label>
   </section>
 
   <div id="ring-summary"></div>
@@ -164,6 +167,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=8"></script>
-<script src="js/main.js?v=25"></script>
+<script src="js/main.js?v=26"></script>
 </body>
 </html>

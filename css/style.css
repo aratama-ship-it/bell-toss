@@ -52,6 +52,19 @@ header {
   line-height: 1;
 }
 
+#app-version {
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+  margin-left: 12px;
+  font-family: "Hiragino Sans", sans-serif;
+  font-weight: 400;
+  vertical-align: 6px;
+}
+
+.av-sync input[type="range"] { width: 110px; }
+#avsync-val { font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; color: var(--ink); }
+
 .title-block .reading {
   font-size: 12px;
   color: var(--ink-soft);
@@ -508,5 +521,5 @@ footer {
   }
 
   /* スライダーは見た目の線が細くても、つまみを掴める高さを確保する */
-  #inp-zoom, #inp-bpm, #inp-flight, #solo-speed { height: 44px; }
+  #inp-zoom, #inp-bpm, #inp-flight, #solo-speed, #inp-avsync { height: 44px; }
 }
