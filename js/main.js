@@ -511,12 +511,18 @@
   // ループの巻き戻しは描画（rAF）ではなくタイマーで行う。タブが裏に回って
   // rAFが止まっても、耳で合わせる稽古（音だけ流し続ける）が途切れないように。
   let loopTimer = null;
+  // 直近の scheduleFrom がループの継ぎ目（先行予約）だったか。
+  // tick の周回ラップ表示はこのときだけ行う。フレッシュ開始でも pos は
+  // playT0 − 0.08 − 出力遅延 から始まるため、フラグなしでラップ条件を書くと
+  // ループ再生の開始直後に一瞬プレイヘッドがループ終端へ飛ぶ
+  let loopChained = false;
 
   // simT 秒から鳴らす。baseTime を指定すると「その音声時刻ちょうどに simT が来る」よう
   // 予約する（ループの継ぎ目用。省略時は今+0.08秒＝新規再生）。
   function scheduleFrom(simT, baseTime) {
     const ctx = TOREI.audio.ensure();
     const fresh = baseTime == null;
+    loopChained = !fresh;   // tick の周回ラップ表示は「継ぎ目」のときだけ有効にする
     // 継ぎ目ではセッションを張り替えない。張り替えると前の周の残響と、
     // 先行予約より後ろにある前の周の末尾の音が切れてしまう
     if (fresh) TOREI.audio.beginSession();
@@ -575,14 +581,20 @@
       // 出力遅延の補正（2026-08-23 本人報告「通常再生でも音ズレ」への対応）。
       // Bluetoothイヤホン等では音がスピーカーに届くまで0.1〜0.3秒かかり、
       // 補正しないと映像（プレイヘッド・舞台）が音より先に動いて「ズレ」に見える。
-      // 表示は「いま耳に聞こえている音」の位置に合わせる
-      const lat = ctx.outputLatency || ctx.baseLatency || 0;
+      // 表示は「いま耳に聞こえている音」の位置に合わせる。
+      // ★上限0.5秒でクランプする（2026-08-25 音声タイムラグ再発の報告を受けて堅牢化）。
+      // Chromeには outputLatency が異常な巨大値を返し続ける既知の不具合がある
+      // （Bluetooth機器の切替後など）。無防備に使うと映像が音から数秒遅れ、
+      // さらに停止→再開のたびにその分だけ大きく巻き戻る。異常値のときは
+      // baseLatency（内部処理分のみ・小さく安定）へ落とす
+      let lat = ctx.outputLatency || 0;
+      if (!(lat >= 0) || lat > 0.5) lat = Math.min(ctx.baseLatency || 0, 0.5);
       let pos = playT0 + (ctx.currentTime - playBase) - lat;
       // 次の周を先行予約した直後は playBase が未来（境界時刻）を指す。境界を越えるまでは
       // 前の周の続きの位置として表示すると、プレイヘッドが途切れず境界を通過する。
       // 条件の playT0 >= loop.a は、再生中にループ開始より前へシークした場合
       // （playT0 がループ外）を誤って巻き込まないため
-      if (state.loop) {
+      if (state.loop && loopChained) {
         const La = state.loop.a * spb();
         if (pos < La - 1e-6 && playT0 >= La - 1e-6) {
           pos += (state.loop.b - state.loop.a) * spb();
