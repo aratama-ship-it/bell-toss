@@ -96,11 +96,27 @@
     state.pos = Math.max(-V.preBeats * spb(), Math.min(V.TOTAL_BEATS * spb(), state.pos));
   }
 
+  // 演者名の変更を画面に反映する（2026-08-26 本人要望で上部からも編集できるようにした）。
+  // ★recompute() を呼ばない。名前は振付に一切影響しないので、組み直す必要がないうえ、
+  // 楽譜を編集済み（確定編成が外れている状態）だと探索が走って待たされる。
+  function applyRename(i, name) {
+    TOREI.setPerfName(i, name);
+    TOREI.timeline.draw(state);
+    TOREI.timeline.buildGutter(state, applyRename);
+    TOREI.stage.render(state.pos);
+    renderSummary();
+    renderStartLayout();
+    renderEffort();
+    renderWarnings();
+    buildCueSheet();
+    if (soloOpen) $("solo-title").textContent = `${TOREI.perfName(soloPerf)} の動き`;
+  }
+
   function drawAll() {
     TOREI.pianoroll.draw(state);
     TOREI.pianoroll.drawGutter(state);
     TOREI.timeline.draw(state);
-    TOREI.timeline.buildGutter(state, () => recompute());
+    TOREI.timeline.buildGutter(state, applyRename);
     TOREI.nav.drawRuler();
     TOREI.stage.prepare(state);
     TOREI.stage.setLabels(!playing);
@@ -542,9 +558,18 @@
       for (const r of sl.waki) parts.push(chip("脇", r));
       for (const r of sl.stand) parts.push(chip("スタンド", r));
       if (!parts.length) parts.push('<span class="sl-empty">手ぶら</span>');
-      return `<div class="sl-row"><span class="sl-perf">${TOREI.perfName(sl.perf)}</span>${parts.join("")}</div>`;
+      // 名前は編集できる。演者名を直す場所を探して画面を下まで探させない
+      // （行動表の左端にも同じ入力欄があるが、気づきにくかった。2026-08-26 本人要望）
+      return `<div class="sl-row">`
+        + `<input class="sl-perf" value="${TOREI.perfName(sl.perf).replace(/"/g, "&quot;")}"`
+        + ` data-perf="${sl.perf}" maxlength="8" title="クリックで演者名を編集">`
+        + `${parts.join("")}</div>`;
     });
-    el.innerHTML = `<div class="sl-head">開始時の持ち方</div><div class="sl-rows">${rows.join("")}</div>`;
+    el.innerHTML = `<div class="sl-head">開始時の持ち方<span class="sl-hint">（演者名はクリックで編集）</span></div>`
+      + `<div class="sl-rows">${rows.join("")}</div>`;
+    for (const inp of el.querySelectorAll(".sl-perf")) {
+      inp.addEventListener("change", () => applyRename(+inp.dataset.perf, inp.value));
+    }
   }
 
   // 警告は「読むもの」ではなく「飛ぶもの」。稽古中に破綻箇所を潰していく道具なので、

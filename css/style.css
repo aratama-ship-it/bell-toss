@@ -211,12 +211,28 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
   border-radius: 7px;
   padding: 5px 10px 5px 8px;
 }
+/* 演者名は入力欄だが、平常時は文字に見せる（枠が並ぶと表が読みにくい）。
+   触れると編集できると分かるよう、ホバーと入力中だけ枠を出す。 */
 .sl-perf {
   font-size: 11px;
   color: var(--ink-soft);
   font-weight: 600;
-  min-width: 3.6em;
+  width: 4.6em;
+  min-width: 4.6em;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  padding: 2px 4px;
+  font-family: inherit;
 }
+.sl-perf:hover { border-color: var(--line); background: var(--bg); }
+.sl-perf:focus {
+  border-color: var(--brass);
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+}
+.sl-hint { font-weight: 400; opacity: 0.75; margin-left: 6px; }
 .sl-slot { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .sl-where { font-style: normal; font-size: 10.5px; color: var(--ink-soft); }
 .sl-note {
@@ -639,5 +655,5 @@ footer {
 
   /* スライダーは見た目の線が細くても、つまみを掴める高さを確保する */
   #inp-zoom, #inp-bpm, #inp-flight, #solo-speed, #inp-avsync { height: 44px; }
-  .effort-grid select, #effort-panel > summary { min-height: 44px; }
+  .effort-grid select, #effort-panel > summary, .sl-perf { min-height: 44px; }
 }
