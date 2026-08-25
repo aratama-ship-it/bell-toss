@@ -153,14 +153,22 @@ function classifySpot(spot, result, spb, TOREI, intervals) {
     ? `素材はあった: ${[...new Set(cands)].join("・")} → 分離経路か投げ側の都合で不採用`
     : "そもそもどの音高のリングも手に静かに置かれていない → 作曲で直せる";
 
+  // 1手和音ではないが、全音が普通のキャッチとして実現している場合は「和音としては鳴る」。
+  // 鳴らない（不可能・振り代用）のとは意味が違うので区別する。1手和音は一撃なので必ず揃うが、
+  // 分かれた場合は演者どうしのタイミング精度に依存する、という差でしかない。
+  const sounds = !kinds.includes("fail") && !kinds.includes("shake") &&
+                 spot.idxs.every(i => (result.noteResults[i] || {}).kind === "toss");
+
   const uniqPerf = new Set(perfs.filter(p => p != null));
   if (uniqPerf.size >= 2) {
-    return { ok: false, kind: "split-perf", detail: `${uniqPerf.size}人に分かれた｜${why}` };
+    return { ok: false, sounds, kind: "split-perf",
+             detail: `${uniqPerf.size}人が同時に鳴らす（和音にはなる。1手の一撃ではないので揃えは演者次第）｜${why}` };
   }
   if (new Set(hands.filter(h => h != null)).size >= 2) {
-    return { ok: false, kind: "split-hand", detail: `同じ演者の左右の手に分かれた｜${why}` };
+    return { ok: false, sounds, kind: "split-hand",
+             detail: `同じ演者の左右の手に分かれた（和音にはなる）｜${why}` };
   }
-  return { ok: false, kind: "other", detail: `判定できない組み合わせ｜${why}` };
+  return { ok: false, sounds, kind: "other", detail: `判定できない組み合わせ｜${why}` };
 }
 
 /* ---------- 1曲を測る ---------- */
@@ -186,6 +194,7 @@ function analyze(song, TOREI, seed) {
     passRate: throws.length ? passes / throws.length : 0,
     chordSpots: spots.length,
     chordHits: spots.filter(s => s.ok).length,
+    chordSounds: spots.filter(s => s.ok || s.sounds).length,
     pitches: new Set(song.notes.map(n => n.midi)).size,
   };
 }
@@ -199,25 +208,27 @@ function printSummary(rows) {
   console.log("");
   console.log(pad("曲", 26) + padL("音数", 5) + padL("音高", 5) + padL("人", 3) +
               padL("BPM", 5) + padL("リング", 7) + padL("パス", 6) +
-              padL("振り", 5) + padL("不可", 5) + padL("和音", 8));
+              padL("振り", 5) + padL("不可", 5) + padL("和音1手/鳴/計", 14));
   console.log("─".repeat(80));
   for (const r of rows) {
-    const chord = r.chordSpots ? `${r.chordHits}/${r.chordSpots}` : "－";
+    // 「1手和音の数／実際に鳴る数／書いた数」。真ん中が書いた数と等しければ、和音は全部鳴っている。
+    const chord = r.chordSpots ? `${r.chordHits}/${r.chordSounds}/${r.chordSpots}` : "－";
     console.log(
       pad(r.song.name.replace(/\s*※.*$/, ""), 26) +
       padL(r.song.notes.length, 5) + padL(r.pitches, 5) +
       padL(r.cfg.nPerformers, 3) + padL(r.song.bpm, 5) +
       padL(r.ringCount, 7) + padL((r.passRate * 100).toFixed(0) + "%", 6) +
-      padL(r.shakes, 5) + padL(r.fails, 5) + padL(chord, 8));
+      padL(r.shakes, 5) + padL(r.fails, 5) + padL(chord, 14));
   }
   const tot = rows.reduce((a, r) => ({
     spots: a.spots + r.chordSpots, hits: a.hits + r.chordHits,
+    sounds: a.sounds + r.chordSounds,
     shakes: a.shakes + r.shakes, fails: a.fails + r.fails,
-  }), { spots: 0, hits: 0, shakes: 0, fails: 0 });
+  }), { spots: 0, hits: 0, sounds: 0, shakes: 0, fails: 0 });
   console.log("─".repeat(80));
-  console.log(`合計: 書かれた和音 ${tot.spots}箇所 → 1手の保持キャッチ和音として成立 ${tot.hits}箇所` +
-              `（${tot.spots ? (tot.hits / tot.spots * 100).toFixed(0) : 0}%）` +
-              ` ／ 振り ${tot.shakes} ／ 不可能 ${tot.fails}`);
+  console.log(`合計: 書かれた和音 ${tot.spots}箇所 → 和音として鳴る ${tot.sounds}箇所` +
+              `（うち1手の保持キャッチ和音 ${tot.hits}箇所）` +
+              ` ／ 鳴らない ${tot.spots - tot.sounds}箇所 ／ 振り ${tot.shakes} ／ 不可能 ${tot.fails}`);
   console.log("");
 }
 
@@ -241,13 +252,16 @@ function printDetail(r, TOREI) {
     console.log("");
     return;
   }
-  console.log(`  書かれた和音 ${r.chordSpots}箇所 → 成立 ${r.chordHits}箇所`);
+  console.log(`  書かれた和音 ${r.chordSpots}箇所 → 和音として鳴る ${r.chordSounds}箇所` +
+              `（うち1手の保持キャッチ和音 ${r.chordHits}箇所）`);
+  console.log("    ○=1手の保持キャッチ和音（一撃で必ず揃う）  △=鳴るが複数の手／演者に分かれる  ×=和音として鳴らない");
   const bpb = s.beatsPerBar || 4;
   for (const sp of r.spots) {
     const bar = Math.floor(sp.beat / bpb) + 1;
     const bi = (sp.beat - (bar - 1) * bpb) + 1;
     const names = sp.midis.map(m => TOREI.noteName(m)).join("+");
-    console.log(`    ${sp.ok ? "○" : "×"} ${padL(bar, 3)}小節${bi.toFixed(bi % 1 ? 1 : 0)}拍  ` +
+    const mark = sp.ok ? "○" : (sp.sounds ? "△" : "×");
+    console.log(`    ${mark} ${padL(bar, 3)}小節${bi.toFixed(bi % 1 ? 1 : 0)}拍  ` +
                 `${pad(names, 12)} ${sp.detail}`);
   }
   console.log("");
