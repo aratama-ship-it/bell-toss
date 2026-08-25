@@ -53,6 +53,7 @@
       state.melody.bpm, state.melody.beatsPerBar,
       state.melody.notes.map(n => [n.beat, n.midi]),
       c.nPerformers, c.flight, c.wakiCap, c.maxDup, c.allowShake, c.standTime, c.passMode,
+      c.effort || null,
     ]);
   }
   function freezeSeed(seed) {
@@ -106,6 +107,7 @@
     TOREI.stage.render(state.pos);
     renderSummary();
     renderStartLayout();
+    renderEffort();
     renderWarnings();
     buildHighlightEls();
     buildCueSheet();
@@ -507,6 +509,18 @@
         + `演者間パス <b>${rate}%</b>（${passes}/${throws.length}投）</span> ｜ `
       : "";
     el.innerHTML = `${passHtml}必要リング <b>${need}本</b> ${cap} ｜ ${parts.join(" ／ ")}`;
+  }
+
+  // 重み付けの効き目を数字で見せる。見えないと調整のしようがない。
+  function renderEffort() {
+    const el = $("effort-now");
+    if (!el) return;
+    if (!state.result) { el.textContent = ""; return; }
+    const m = TOREI.effortMetrics(state.result, state.cfg);
+    const acts = m.perActions.map((c, i) => `${TOREI.perfName(i)} ${c}`).join(" ／ ");
+    el.innerHTML = `いまの編成: 窮屈な連続 <b>${m.tight}</b>回 ｜ 高さの変化 <b>${m.levelChange}</b>回 ｜ `
+      + `高さ上限超え <b>${m.tooHigh}</b>本 ｜ 遠い演者へのパス <b>${m.farPasses}</b>回 ｜ `
+      + `演者ごとの動作数 ${acts}（偏り <b>${Math.round(m.imbalance * 100)}%</b>）`;
   }
 
   // 開演の瞬間に誰が何の音を持っているか（2026-08-25 本人要望）。
@@ -1262,6 +1276,23 @@
     $("inp-zoom").addEventListener("input", () => zoomTo(+$("inp-zoom").value));
     $("btn-loop-bar").addEventListener("click", loopCurrentBar);
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
+    // 難易度の重み付け（2026-08-25 本人要望）。
+    // 物理的に成立していても人に無理な編成はある。ここは「重み」ではなく
+    // 手の余裕・高さの上限といった稽古で使える言葉で持つ（scheduler.js の TOREI.EFFORT）。
+    const effortInputs = [
+      ["eff-gap", "handGap"], ["eff-level", "maxLevel"], ["eff-even", "evenLevel"],
+      ["eff-load", "evenLoad"], ["eff-far", "farPass"], ["eff-ring", "ringCost"],
+    ];
+    function readEffort() {
+      const e = {};
+      for (const [id, key] of effortInputs) e[key] = +$(id).value;
+      state.cfg.effort = e;
+    }
+    readEffort();
+    for (const [id] of effortInputs) {
+      $(id).addEventListener("change", () => { readEffort(); recompute(); });
+    }
+
     // 音ズレ補正スライダー（端末設定）
     $("inp-avsync").value = Math.round(avSync * 1000);
     $("avsync-val").textContent = Math.round(avSync * 1000);

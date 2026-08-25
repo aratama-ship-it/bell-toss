@@ -235,6 +235,57 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
 }
 .sl-empty { font-size: 11px; color: var(--ink-soft); opacity: 0.7; }
 
+/* 難易度の重み付け（2026-08-25 本人要望）。
+   常時開いておくには項目が多く、かといって隠すと存在に気づけない。
+   閉じた状態でも「何を設定できるか」が1行で分かる details にする。 */
+#effort-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 0;
+  margin: 0 0 10px;
+}
+#effort-panel > summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  list-style: none;
+}
+#effort-panel > summary::-webkit-details-marker { display: none; }
+#effort-panel > summary::before { content: "▸ "; color: var(--brass); }
+#effort-panel[open] > summary::before { content: "▾ "; }
+#effort-panel > summary:hover { color: var(--ink); }
+.effort-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 16px;
+  padding: 4px 12px 10px;
+}
+.effort-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+.effort-grid select { font-size: 12px; padding: 3px 4px; }
+.effort-grid i {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  opacity: 0.9;
+  line-height: 1.4;
+}
+.effort-note {
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.effort-note b { color: var(--ink); font-weight: 600; }
+
 /* Qシート冒頭の「開演時の構え」。演者はこれを見て舞台に立つ */
 .cue-start {
   margin: 0 0 8px;
@@ -588,4 +639,5 @@ footer {
 
   /* スライダーは見た目の線が細くても、つまみを掴める高さを確保する */
   #inp-zoom, #inp-bpm, #inp-flight, #solo-speed, #inp-avsync { height: 44px; }
+  .effort-grid select, #effort-panel > summary { min-height: 44px; }
 }

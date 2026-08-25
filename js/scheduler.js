@@ -39,6 +39,60 @@ TOREI.SCHED = {
 
 /* 乱択リスタート: コストに微小なジッターを加えて複数回走らせ、
    (不可能数, 振り数, 和音の欠け, リング数, パス率) が最良の結果を採用する。シード固定で再現可能。 */
+/* ---------- 「無理のなさ」の指標（2026-08-25 本人要望）----------
+   これまでの採点は「成立するか」「パスが多いか」だけを見ていた。だが物理的に成立しても
+   人間に無理な編成はある。稽古で効いてくるのは次のような条件で、いずれも実測で大きくばらつく。
+
+     窮屈さ   … 同じ手が短い間隔で連続して動く回数（全34曲で3〜26回）
+     偏り     … 演者ごとの動作数の差（4〜53%。一人に集中すると他が手持ち無沙汰になる）
+     高さの乱れ… 同じ手の連続する投げで高さの段が変わる回数（0〜21回）
+     高い投げ … 高さの上限を超える投げの本数
+     遠パス   … 隣でない演者へのパス（3〜44回。距離が伸びるほど難度が上がる）
+
+   ここは「重み」ではなく物理的に意味の分かる言葉で持つ。稽古で「手の余裕を0.8秒に」とは
+   言えても「窮屈さの重みを0.15に」とは言えないため。 */
+TOREI.EFFORT = {
+  handGap: 0.6,      // 同じ手の動作間隔として確保したい秒数。これを下回るぶんだけ減点
+  gapCost: 0.15,     // 窮屈な動作1回あたりの減点
+  maxLevel: 5,       // 許容する投げの高さの段（1〜5）。5＝制限なし
+  levelCost: 0.5,    // 上限を超えた投げ1本あたりの減点
+  evenLevel: 0.2,    // 同じ手で高さの段が変わる1回あたりの減点（0で気にしない）
+  evenLoad: 3.0,     // 演者間の偏り（0〜1）にかける減点
+  farPass: 0.05,     // 隣でない演者へのパス1回あたりの減点
+  ringCost: 0.1,     // リング1本あたりの減点（本数を絞りたいほど上げる）
+};
+
+/* 上の指標を実測する。ブラウザの採点・最適化ツール・点検ツールが同じ数値を見るよう1か所に置く */
+TOREI.effortMetrics = function (r, cfg) {
+  const n = cfg.nPerformers || 3;
+  const E = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
+  const acts = r.actions.filter(a => a.t >= -0.001 &&
+    (a.type === "throw" || a.type === "catch" || a.type === "pickup" || a.type === "store" || a.type === "shake"));
+  const throws = r.actions.filter(a => a.type === "throw");
+
+  let tight = 0, levelChange = 0;
+  for (let p = 0; p < n; p++) {
+    for (let h = 0; h < 2; h++) {
+      const ts = acts.filter(a => a.perf === p && a.hand === h).map(a => a.t).sort((x, y) => x - y);
+      for (let i = 1; i < ts.length; i++) {
+        const gap = ts[i] - ts[i - 1];
+        // 同時刻の2件は保持キャッチ和音（1回の動作で2つ鳴る）なので窮屈ではない
+        if (gap > 1e-6 && gap < E.handGap) tight++;
+      }
+      const seq = throws.filter(a => a.perf === p && a.hand === h)
+        .sort((x, y) => x.t - y.t).map(a => TOREI.throwLevel(a.flight));
+      for (let i = 1; i < seq.length; i++) if (seq[i] !== seq[i - 1]) levelChange++;
+    }
+  }
+  const per = [];
+  for (let p = 0; p < n; p++) per.push(acts.filter(a => a.perf === p).length);
+  const hi = Math.max(...per, 1);
+  const imbalance = per.length > 1 ? (hi - Math.min(...per)) / hi : 0;
+  const tooHigh = throws.filter(a => TOREI.throwLevel(a.flight) > E.maxLevel).length;
+  const farPasses = throws.filter(a => a.pass && Math.abs(a.perf - a.catchPerf) >= 2).length;
+  return { tight, levelChange, imbalance, tooHigh, farPasses, perActions: per };
+};
+
 /* 編成の良し悪しを1つの数値にする。小さいほど良い。
    ★ブラウザの探索（TOREI.schedule）と、配布用の編成を選ぶ tools/optimize.mjs の
    両方がこの関数を使う。別々に持つと必ず食い違い、「ツールが選んだ最良」と
@@ -66,11 +120,17 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   // 成立や和音を覆さない程度の軽い重みにとどめる。
   const firstCatch = r.actions.find(a => a.type === "catch" && a.noteIdx === 0);
   const openMiss = (cfg.passMode === "off" || !firstCatch || firstCatch.pass) ? 0 : 0.6;
+  // 人間に無理がないか（2026-08-25 本人要望）。物理的な成立とは別の軸なので、
+  // 破綻・振り・和音より弱く、パス率と competing する程度の重みに置く。
+  const E = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
+  const em = TOREI.effortMetrics(r, cfg);
+  const effort = em.tight * E.gapCost + em.tooHigh * E.levelCost
+    + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass;
   return {
-    score: fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * 0.1
-      + fuss + passFloor + openMiss - passBonus,
+    score: fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * E.ringCost
+      + fuss + passFloor + openMiss + effort - passBonus,
     fails, shakes, chordMiss, passRate, rings: r.rings.length,
-    handoffs, prepWaki, openPass: !!(firstCatch && firstCatch.pass),
+    handoffs, prepWaki, openPass: !!(firstCatch && firstCatch.pass), effort, em,
   };
 };
 

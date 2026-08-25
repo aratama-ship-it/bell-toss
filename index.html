@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=16">
+<link rel="stylesheet" href="css/style.css?v=17">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.25-3</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.25-4</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -70,6 +70,57 @@
       音ズレ補正 <input type="range" id="inp-avsync" min="0" max="400" step="10" value="0">
       <span id="avsync-val">0</span>ms</label>
   </section>
+
+  <details id="effort-panel">
+    <summary>無理のなさ（人にとっての難しさをどう重く見るか）</summary>
+    <div class="effort-grid">
+      <label>手の余裕
+        <select id="eff-gap">
+          <option value="0.4">0.4秒（詰めてよい）</option>
+          <option value="0.6" selected>0.6秒（標準）</option>
+          <option value="0.8">0.8秒（ゆったり）</option>
+          <option value="1.0">1.0秒（かなり余裕）</option>
+        </select>
+        <i>同じ手が続けて動くとき空けたい時間</i></label>
+      <label>投げの高さの上限
+        <select id="eff-level">
+          <option value="2">高さ2まで</option>
+          <option value="3">高さ3まで</option>
+          <option value="4">高さ4まで</option>
+          <option value="5" selected>制限なし</option>
+        </select>
+        <i>これを超える投げを避ける</i></label>
+      <label>高さを揃える
+        <select id="eff-even">
+          <option value="0">気にしない</option>
+          <option value="0.2" selected>ほどほど</option>
+          <option value="0.6">よく揃える</option>
+        </select>
+        <i>同じ手の投げの高さを変えない</i></label>
+      <label>演者の均等さ
+        <select id="eff-load">
+          <option value="0">気にしない</option>
+          <option value="3" selected>ほどほど</option>
+          <option value="8">よく均す</option>
+        </select>
+        <i>一人に動作が集中しないようにする</i></label>
+      <label>遠い演者へのパス
+        <select id="eff-far">
+          <option value="0">許す</option>
+          <option value="0.05" selected>控えめ</option>
+          <option value="0.3">避ける</option>
+        </select>
+        <i>隣でない演者へ投げる距離の長いパス</i></label>
+      <label>リングの本数
+        <select id="eff-ring">
+          <option value="0.02">気にしない</option>
+          <option value="0.1" selected>ほどほど</option>
+          <option value="0.5">なるべく減らす</option>
+        </select>
+        <i>用意する鈴の総数</i></label>
+    </div>
+    <p class="effort-note" id="effort-now"></p>
+  </details>
 
   <div id="ring-summary"></div>
   <div id="start-layout"></div>
@@ -161,14 +212,14 @@
 <script src="js/presets.js?v=3"></script>
 <script src="js/songfile.js?v=1"></script>
 <script src="js/songs.js?v=27"></script>
-  <script src="js/seeds.js?v=1"></script>
-<script src="js/scheduler.js?v=12"></script>
+  <script src="js/seeds.js?v=2"></script>
+<script src="js/scheduler.js?v=13"></script>
 <script src="js/audio.js"></script>
 <script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=9"></script>
-<script src="js/main.js?v=28"></script>
+<script src="js/main.js?v=29"></script>
 </body>
 </html>
