@@ -37,6 +37,9 @@
     // 小節操作以外の編集が入ったら「取り消す」を無効化する。
     // 古いスナップショットで新しい編集ごと巻き戻す事故を防ぐため
     if (!inBarOp && typeof invalidateBarUndo === "function" && barSnapshot) invalidateBarUndo();
+    // 再計算でスケジュールが別物になるので、開きっぱなしのモーダルは閉じる
+    // （古い動作列のまま操作させない）
+    if (soloOpen) closeSolo();
     state.result = TOREI.schedule(state.melody, state.cfg);
     const sp = spb();
     V.preBeats = Math.ceil(Math.max(0, -state.result.minT) / sp + 0.001);
@@ -103,6 +106,12 @@
       b.addEventListener("click", () => { cuePerf = i; buildCueSheet(); });
       tabs.appendChild(b);
     }
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "cue-open";
+    open.textContent = "▶ この演者の動きを見る";
+    open.addEventListener("click", () => openSolo(cuePerf));
+    tabs.appendChild(open);
     // 本体
     cueRows = [];
     cueLastIdx = -1;
@@ -133,6 +142,105 @@
     body.innerHTML = "";
     body.appendChild(table);
     updateCueHighlight();
+  }
+
+  /* ---------- 演者1人分の動きモーダル（2026-08-25） ----------
+     Qシートの表は「いつ何をするか」は分かるが、体の動きは想像するしかない。
+     舞台ビューの1人分を拡大し、ゆっくり再生して所作を覚えるための画面。
+     本編の再生とは独立した時計で動く（本編を止めずに確認できるように）。 */
+  let soloOpen = false, soloPerf = 0, soloRows = [], soloIdx = 0;
+  let soloT = 0, soloPlaying = false, soloRaf = 0, soloLast = 0, soloSpeed = 0.5;
+
+  function openSolo(perfId) {
+    if (!state.result) return;
+    soloPerf = perfId;
+    soloRows = TOREI.cueSheet(state.result, state.melody, state.cfg, perfId);
+    if (!soloRows.length) { showNotice("この演者には動作がありません"); return; }
+    soloOpen = true;
+    $("solo-modal").hidden = false;
+    $("solo-title").textContent = `${TOREI.perfName(perfId)} の動き`;
+    // いまの再生位置に最も近い動作から始める（Qシートで見ていた場所を引き継ぐ）
+    soloIdx = 0;
+    for (let i = 0; i < soloRows.length; i++) if (soloRows[i].t <= state.pos + 1e-6) soloIdx = i;
+    soloSeek(soloRows[soloIdx].t);
+    $("solo-close").focus();
+  }
+
+  function closeSolo() {
+    soloOpen = false;
+    soloPlaying = false;
+    cancelAnimationFrame(soloRaf);
+    $("solo-modal").hidden = true;
+    $("solo-play").textContent = "▶ 再生";
+  }
+
+  function soloSeek(t) {
+    soloT = t;
+    // 直近に過ぎた動作を「いま」として表示する
+    let idx = -1;
+    for (let i = 0; i < soloRows.length; i++) { if (soloRows[i].t > t + 1e-6) break; idx = i; }
+    if (idx >= 0) soloIdx = idx;
+    drawSolo();
+  }
+
+  function drawSolo() {
+    if (!soloOpen) return;
+    const canvas = $("solo-stage");
+    // ★canvas自身の clientWidth は setupCanvas が書いたインラインstyle（＝前回の寸法）に
+    // 引きずられるうえ、モーダルを開いた直後は 0 になることがある。親の実寸から測る
+    // （#stage で同じ罠を踏んで stageBox() を作ったのと同じ理由）。
+    const panel = canvas.parentElement;
+    const cs = getComputedStyle(panel);
+    // 親の「内容幅」= clientWidth − 左右padding。canvasはwidth:100%なのでこれが実寸。
+    // canvas自身の clientWidth を使わないのは、setupCanvas が書いたインラインstyle
+    // （＝前回の寸法）に引きずられ、開いた直後は0になることもあるため。
+    // box-sizing:border-box なので枠線分を引く必要はない（引くと隙間ができる）
+    const w = Math.round(panel.clientWidth
+      - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+    const h = parseFloat(cs.getPropertyValue("--solo-h")) || 340;
+    if (w <= 0) return;
+    TOREI.stage.renderSolo(canvas, soloT, soloPerf, w, h);
+    const r = soloRows[soloIdx];
+    $("solo-now").textContent = r
+      ? `${r.bar || "準備"}　${r.label}　${r.hand}：${r.text}`
+      : "—";
+  }
+
+  function soloStep(dir) {
+    soloPlaying = false;
+    cancelAnimationFrame(soloRaf);
+    $("solo-play").textContent = "▶ 再生";
+    const next = Math.max(0, Math.min(soloRows.length - 1, soloIdx + dir));
+    soloIdx = next;
+    soloT = soloRows[next].t;
+    drawSolo();
+  }
+
+  function soloTick() {
+    if (!soloPlaying) return;
+    const now = performance.now();
+    soloT += ((now - soloLast) / 1000) * soloSpeed;
+    soloLast = now;
+    const end = soloRows[soloRows.length - 1].t + 1.5;
+    if (soloT >= end) { soloT = end; soloPlaying = false; $("solo-play").textContent = "▶ 再生"; }
+    soloSeek(soloT);
+    if (soloPlaying) soloRaf = requestAnimationFrame(soloTick);
+  }
+
+  function soloTogglePlay() {
+    if (soloPlaying) {
+      soloPlaying = false;
+      cancelAnimationFrame(soloRaf);
+      $("solo-play").textContent = "▶ 再生";
+      return;
+    }
+    // 終端まで見たあとの再生は頭から
+    const end = soloRows[soloRows.length - 1].t + 1.5;
+    if (soloT >= end - 1e-6) soloT = soloRows[0].t;
+    soloPlaying = true;
+    soloLast = performance.now();
+    $("solo-play").textContent = "■ 停止";
+    soloRaf = requestAnimationFrame(soloTick);
   }
 
   // 再生位置の行を強調し、視界に持ってくる（毎フレーム呼ばれるので差分だけ触る）
@@ -977,6 +1085,14 @@
   function onKey(ev) {
     const tag = ev.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    // モーダル表示中は本編の操作（Space=再生、矢印=シーク）を奪わない
+    if (soloOpen) {
+      if (ev.key === "Escape") { ev.preventDefault(); closeSolo(); }
+      else if (ev.code === "Space") { ev.preventDefault(); soloTogglePlay(); }
+      else if (ev.key === "ArrowLeft") { ev.preventDefault(); soloStep(-1); }
+      else if (ev.key === "ArrowRight") { ev.preventDefault(); soloStep(1); }
+      return;
+    }
     if (ev.code === "Space") {
       ev.preventDefault();
       playing ? stopPlayback() : startPlayback();
@@ -1051,6 +1167,20 @@
     $("inp-zoom").addEventListener("input", () => zoomTo(+$("inp-zoom").value));
     $("btn-loop-bar").addEventListener("click", loopCurrentBar);
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
+    // 演者1人分の動きモーダル
+    $("solo-close").addEventListener("click", closeSolo);
+    $("solo-play").addEventListener("click", soloTogglePlay);
+    $("solo-prev").addEventListener("click", () => soloStep(-1));
+    $("solo-next").addEventListener("click", () => soloStep(1));
+    $("solo-speed").addEventListener("input", () => {
+      soloSpeed = +$("solo-speed").value;
+      $("solo-speed-val").textContent = soloSpeed.toFixed(2).replace(/0$/, "");
+    });
+    // 背景（パネルの外）クリックで閉じる
+    $("solo-modal").addEventListener("mousedown", (ev) => {
+      if (ev.target === $("solo-modal")) closeSolo();
+    });
+
     $("btn-bar-insert").addEventListener("click", insertBar);
     $("btn-bar-delete").addEventListener("click", deleteBar);
     $("btn-bar-undo").addEventListener("click", undoBarOp);
@@ -1141,6 +1271,7 @@
 
     window.addEventListener("resize", () => {
       if (state.result) { TOREI.stage.prepare(state); TOREI.stage.render(state.pos); }
+      if (soloOpen) drawSolo();
       scheduleNavDraw();
     });
 

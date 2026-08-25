@@ -365,6 +365,66 @@ button:focus-visible, input:focus-visible {
 
 .hint { font-size: 11.5px; color: var(--ink-soft); padding: 8px 2px; }
 
+/* --- 演者1人分の動きモーダル --- */
+#solo-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(44, 49, 58, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+#solo-modal[hidden] { display: none; }
+#solo-panel {
+  /* ソロ舞台の高さの一次情報。JSは getComputedStyle でここを読む
+     （canvas自身の高さは setupCanvas のインラインstyleに上書きされるため）。 */
+  --solo-h: 340px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: 0 12px 40px rgba(44, 49, 58, 0.25);
+  padding: 16px 18px 14px;
+  width: min(760px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+}
+#solo-head { display: flex; align-items: baseline; gap: 12px; }
+#solo-head .spacer { flex: 1; }
+#solo-title {
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 18px; font-weight: 600; letter-spacing: 0.08em;
+}
+#solo-stage {
+  display: block; width: 100%; height: var(--solo-h);
+  margin-top: 10px;
+  border: 1px solid var(--line); border-radius: 2px;
+  background: linear-gradient(180deg, #faf8f3 0%, #f1ede3 100%);
+}
+/* いま何をしているか。1行で高さを固定し、切り替わっても画面が揺れないようにする */
+#solo-now {
+  margin-top: 8px; padding: 7px 10px;
+  background: #f1ede2; border-left: 3px solid var(--brass);
+  font-size: 13px; min-height: 1.5em;
+  font-variant-numeric: tabular-nums;
+}
+#solo-controls {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px 12px; margin-top: 10px;
+}
+#solo-controls .spacer { flex: 1; }
+.solo-speed { display: inline-flex; align-items: center; gap: 6px; }
+.solo-speed input[type="range"] { width: 110px; }
+#solo-speed-val { font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; color: var(--ink); }
+.cue-open {
+  font: inherit; font-size: 12px; padding: 3px 12px;
+  border: 1px solid var(--brass); border-radius: 2px;
+  background: transparent; color: var(--brass); cursor: pointer;
+}
+.cue-open:hover { background: var(--brass); color: var(--paper); }
+
+@media (max-width: 720px) {
+  #solo-modal { padding: 8px; }
+  #solo-panel { padding: 12px 12px 10px; --solo-h: 260px; }
+}
+
 /* --- Qシート（演者ごとの手順） --- */
 #cuesheet { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
 #cuesheet-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; }
@@ -435,10 +495,14 @@ footer {
   #btn-bar-insert,
   #btn-bar-delete,
   #btn-bar-undo,
-  #btn-more-toggle {
+  #btn-more-toggle,
+  #solo-play,
+  #solo-prev,
+  #solo-next,
+  #solo-close {
     min-height: 44px;
   }
 
   /* スライダーは見た目の線が細くても、つまみを掴める高さを確保する */
-  #inp-zoom, #inp-bpm, #inp-flight { height: 44px; }
+  #inp-zoom, #inp-bpm, #inp-flight, #solo-speed { height: 44px; }
 }

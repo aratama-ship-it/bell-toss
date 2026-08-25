@@ -24,6 +24,7 @@ TOREI.stage = (() => {
     for (let i = 0; i < n; i++) {
       const x = (W * (i + 1)) / (n + 1);
       perfs.push({
+        id: i,          // ソロ表示のフィルタで使う
         x, floorY, handY,
         hands: [ { x: x - 20, y: handY }, { x: x + 20, y: handY } ],
         standX: x + 50,
@@ -95,14 +96,16 @@ TOREI.stage = (() => {
           // 距離で高さを足すのは非現実的なのでしない（パスは低く速く飛ぶ）。
           const PX_PER_M = 124 / 1.7;
           const h = (9.8 * a.flight * a.flight / 8) * PX_PER_M;
-          segs.push({ t0: a.t, t1: a.t + a.flight, kind: "air", from, to, h, loc: "air" });
+          // fromPerf/toPerf はソロ表示（1人分の拡大）で「この人に関係する飛球か」を判定するのに使う
+          segs.push({ t0: a.t, t1: a.t + a.flight, kind: "air", from, to, h, loc: "air",
+                      fromPerf: a.perf, toPerf: cpPerf });
           cur = { kind: "still", pos: { x: cp.x, y: cp.y }, since: a.t + a.flight, loc: "hand" };
         } else if (a.type === "catch") {
           const hp = posHand(a.perf, a.hand);
-          effects.push({ t: a.t, x: hp.x, y: hp.y, midi: a.midi, kind: "catch" });
+          effects.push({ t: a.t, x: hp.x, y: hp.y, midi: a.midi, kind: "catch", perf: a.perf });
         } else if (a.type === "shake") {
           const hp = posHand(a.perf, a.hand);
-          effects.push({ t: a.t, x: hp.x, y: hp.y, midi: a.midi, kind: "shake" });
+          effects.push({ t: a.t, x: hp.x, y: hp.y, midi: a.midi, kind: "shake", perf: a.perf });
         }
       }
       closeStill(1e9);
@@ -163,9 +166,43 @@ TOREI.stage = (() => {
     const { W, H } = stageBox();
     if (scene.W !== W || scene.H !== H) prepare(scene.state); // 寸法が変わったら組み直し
     const ctx = TOREI.pianoroll.setupCanvas(canvas, W, H);
-    const { floorY, perfs, rings, effects } = scene;
+    drawScene(ctx, t, W, H, null);
+  }
 
-    // --- 背景: 大窓 ---
+  /* 1人分だけを拡大して別のcanvasへ描く（Qシートのモーダル用。2026-08-25）。
+     舞台の座標系は prepare() が全演者ぶんで組んでいるので、そこから作り直すのではなく
+     「対象演者を中心に平行移動して拡大する」変換を掛けて、描画ロジックをそのまま使う。
+     こうすれば本番の舞台ビューと見た目が完全に一致する（別実装だと必ずズレる）。 */
+  function renderSolo(canvas, t, perfId, cssW, cssH) {
+    if (!scene) return;
+    const p = scene.perfs[perfId];
+    if (!p) return;
+    const ctx = TOREI.pianoroll.setupCanvas(canvas, cssW, cssH);
+    // 1人分の見せ場が収まる範囲。投げの放物線は頭上へ大きく伸びる（滞空1.4秒で
+    // 頭上約2.4m≒175px）ので、縦は体（124px）＋投げの高さ＋余白で見積もる。
+    // 体（頭上124px＋床まで）と両手・スタンドが気持ちよく収まる大きさを優先する。
+    // 投げの放物線は頭上へ大きく伸びるが、全部を入れると演者が小さくなりすぎるので
+    // 上に少し余白を取るだけにして、軌道は上端で切れてよい（所作を覚えるのが目的）。
+    const spanW = 250, spanH = 250;
+    const scale = Math.min(cssW / spanW, cssH / spanH);
+    ctx.save();
+    // 対象演者を中心に。スタンド(x+50)と脇(x-10)の中間が視覚的な重心
+    const cx = p.x + 20;
+    const cy = scene.floorY - 80;
+    ctx.translate(cssW / 2, cssH / 2);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    drawScene(ctx, t, cssW, cssH, perfId);
+    ctx.restore();
+  }
+
+  // perfFilter が数値なら、その演者に関係する要素だけを描く
+  function drawScene(ctx, t, W, H, perfFilter) {
+    const { floorY, perfs, rings, effects } = scene;
+    const solo = perfFilter != null;
+
+    // --- 背景: 大窓 ---（ソロ表示では拡大で画面外になるので省く）
+    if (!solo) {
     const winW = Math.min(W * 0.62, 560);
     const winX = (W - winW) / 2;
     const winY = 20, winH = floorY - 46;
@@ -184,12 +221,20 @@ TOREI.stage = (() => {
       ctx.beginPath(); ctx.moveTo(winX, gy); ctx.lineTo(winX + winW, gy); ctx.stroke();
     }
 
-    // 床
+    }
+
+    // 床（ソロ表示では対象演者の周りだけ）
     ctx.strokeStyle = "rgba(44,49,58,0.3)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(0, floorY + 0.5);
-    ctx.lineTo(W, floorY + 0.5);
+    if (solo) {
+      const p0 = perfs[perfFilter];
+      ctx.moveTo(p0.x - 130, floorY + 0.5);
+      ctx.lineTo(p0.x + 130, floorY + 0.5);
+    } else {
+      ctx.moveTo(0, floorY + 0.5);
+      ctx.lineTo(W, floorY + 0.5);
+    }
     ctx.stroke();
 
     // --- リング位置を先に解決（腕の描画に使う） ---
@@ -197,6 +242,7 @@ TOREI.stage = (() => {
 
     // --- スタンド ---
     for (const p of perfs) {
+      if (solo && p.id !== perfFilter) continue;
       ctx.strokeStyle = "rgba(44,49,58,0.4)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -212,6 +258,7 @@ TOREI.stage = (() => {
 
     // --- 演者 ---
     for (let i = 0; i < perfs.length; i++) {
+      if (solo && i !== perfFilter) continue;
       const p = perfs[i];
       ctx.strokeStyle = "#3d5578";
       ctx.lineWidth = 2.2;
@@ -235,7 +282,9 @@ TOREI.stage = (() => {
         let target = { x: p.hands[h].x, y: p.hands[h].y };
         for (let ri = 0; ri < rings.length; ri++) {
           const r = rings[ri], pos = positions[ri];
-          if (!pos || r.owner !== i) continue;
+          // owner ではなく位置で判定する（owner は最終的な持ち主で、パス後の所在と
+          // 食い違う。owner で絞ると、パスで受け取ったリングへ腕が伸びない）
+          if (!pos) continue;
           const s = pos.seg;
           const inHand = (s.kind === "still" && Math.abs(pos.x - p.hands[h].x) < 12 && Math.abs(pos.y - p.hands[h].y) < 12)
             || (s.kind === "move" && Math.abs(s.to.x - p.hands[h].x) < 12 && Math.abs(s.to.y - p.hands[h].y) < 12);
@@ -258,6 +307,14 @@ TOREI.stage = (() => {
     for (let ri = 0; ri < rings.length; ri++) {
       const r = rings[ri], pos = positions[ri];
       if (!pos) continue;
+      // ソロ表示は「実際に描かれる位置が対象演者の視野に入っているか」だけで判定する。
+      // ★ring.owner で絞ってはいけない: owner は曲の最終的な持ち主を指す静的な値で、
+      // パスで持ち主が移った後も元の値のままではない（＝その時刻の所在を表さない）。
+      // 位置で判定すれば、手・脇・スタンド・飛球のすべてを一貫して扱える。
+      if (solo) {
+        const p0 = perfs[perfFilter];
+        if (Math.abs(pos.x - p0.x) > 125) continue;   // 1人分の視野の外
+      }
       // 空中のリングは軌道もうっすら描く
       if (pos.seg.kind === "air") {
         const s = pos.seg;
@@ -279,8 +336,11 @@ TOREI.stage = (() => {
 
     // 脇にリングを挟んでいる演者には「脇」ラベル
     for (let i = 0; i < perfs.length; i++) {
+      if (solo && i !== perfFilter) continue;
       const p = perfs[i];
-      const hasWaki = rings.some((r, ri) => r.owner === i && positions[ri] && positions[ri].seg.loc === "waki");
+      // 位置で判定する（owner は最終的な持ち主で、その時刻の所在を表さない）
+      const hasWaki = rings.some((r, ri) => positions[ri] && positions[ri].seg.loc === "waki"
+        && Math.abs(positions[ri].x - p.wakiX) < 30);
       if (hasWaki) {
         ctx.font = "9.5px 'Hiragino Sans', sans-serif";
         ctx.fillStyle = "rgba(44,49,58,0.5)";
@@ -292,6 +352,7 @@ TOREI.stage = (() => {
 
     // --- キャッチの波紋と音名 ---
     for (const e of effects) {
+      if (solo && e.perf != null && e.perf !== perfFilter) continue;
       const age = t - e.t;
       if (age < 0 || age > 1.1) continue;
       if (age < 0.6) {
@@ -313,5 +374,5 @@ TOREI.stage = (() => {
     }
   }
 
-  return { prepare, render };
+  return { prepare, render, renderSolo };
 })();

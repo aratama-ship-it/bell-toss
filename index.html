@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=13">
 </head>
 <body>
 <header>
@@ -124,6 +124,29 @@
     </div>
     <div id="cuesheet-body" role="tabpanel"></div>
   </section>
+
+  <!-- 演者1人分の動きを大きく見るモーダル（Qシートの「動きを見る」から開く） -->
+  <div id="solo-modal" hidden role="dialog" aria-modal="true" aria-labelledby="solo-title">
+    <div id="solo-panel">
+      <div id="solo-head">
+        <h2 id="solo-title">演者の動き</h2>
+        <span class="spacer"></span>
+        <button id="solo-close" class="mini-wide" aria-label="閉じる">閉じる ✕</button>
+      </div>
+      <canvas id="solo-stage"></canvas>
+      <div id="solo-now">—</div>
+      <div id="solo-controls">
+        <button id="solo-play" class="primary">▶ 再生</button>
+        <button id="solo-prev" class="mini-wide">◀ 前の動作</button>
+        <button id="solo-next" class="mini-wide">次の動作 ▶</button>
+        <span class="spacer"></span>
+        <label class="solo-speed">速さ
+          <input type="range" id="solo-speed" min="0.25" max="1" step="0.05" value="0.5"
+            aria-label="再生の速さ">
+          <span id="solo-speed-val">0.5</span>倍</label>
+      </div>
+    </div>
+  </div>
 </main>
 
 <footer>
@@ -140,7 +163,7 @@
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
-<script src="js/stage.js?v=2"></script>
-<script src="js/main.js?v=20"></script>
+<script src="js/stage.js?v=8"></script>
+<script src="js/main.js?v=23"></script>
 </body>
 </html>
