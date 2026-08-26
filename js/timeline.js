@@ -102,7 +102,14 @@ TOREI.timeline = (() => {
         ctx.moveTo(x1, y);
         ctx.quadraticCurveTo((x1 + x2) / 2, Math.min(y, y2) - 14 - a.flight * 4, x2, y2);
         ctx.stroke();
-        // 投げ点（白抜き丸）
+        // 投げ点（白抜き丸）。人間が編集した音（fix）は金の四角で囲む
+        const fx = a.noteIdx != null && state.melody.notes[a.noteIdx]
+          ? state.melody.notes[a.noteIdx].fix : null;
+        if (fx) {
+          ctx.strokeStyle = "rgba(169,130,47,0.9)";
+          ctx.lineWidth = 1.4;
+          ctx.strokeRect(x1 - 7, y - 7, 14, 14);
+        }
         ctx.fillStyle = "#f8f5ee";
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.6;
@@ -202,5 +209,21 @@ TOREI.timeline = (() => {
     }
   }
 
-  return { draw, buildGutter, BAND_H, LANE_Y, height, layoutAction };
+  /* ダイヤグラム上の投げのヒットテスト（2026-08-26 人間の組み直し用）。
+     canvasローカル座標 (px, py) に最も近い投げ点（弧の始点の白抜き丸）を返す。 */
+  function throwAt(state, px, py) {
+    if (!state.result) return null;
+    const spb = 60 / state.melody.bpm;
+    let best = null, bestD = 12 * 12;   // 12px以内だけ拾う
+    for (const a of state.result.actions) {
+      if (a.type !== "throw" || a.noteIdx == null) continue;
+      const x = V.x(a.t / spb);
+      const y = a.perf * BAND_H + LANE_Y[a.hand];
+      const d = (px - x) * (px - x) + (py - y) * (py - y);
+      if (d < bestD) { bestD = d; best = a; }
+    }
+    return best;
+  }
+
+  return { draw, buildGutter, BAND_H, LANE_Y, height, layoutAction, throwAt };
 })();

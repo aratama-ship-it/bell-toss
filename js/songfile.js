@@ -19,7 +19,9 @@ TOREI.songfile = (() => {
       maxDup: state.cfg.maxDup,
       maxRings: state.cfg.maxRings || null,
       allowShake: state.cfg.allowShake,
-      notes: state.melody.notes.map(n => ({ beat: n.beat, midi: n.midi })),
+      notes: state.melody.notes.map(n => n.fix
+        ? { beat: n.beat, midi: n.midi, fix: n.fix }
+        : { beat: n.beat, midi: n.midi }),
     };
   }
 

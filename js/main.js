@@ -51,7 +51,7 @@
     const c = state.cfg;
     return JSON.stringify([
       state.melody.bpm, state.melody.beatsPerBar,
-      state.melody.notes.map(n => [n.beat, n.midi]),
+      state.melody.notes.map(n => [n.beat, n.midi, n.fix || null]),
       c.nPerformers, c.flight, c.wakiCap, c.maxDup, c.maxRings || null, c.allowShake, c.standTime, c.passMode,
       c.effort || null,
     ]);
@@ -119,6 +119,101 @@
     renderWarnings();
     buildCueSheet();
     if (soloOpen) $("solo-title").textContent = `${TOREI.perfName(soloPerf)} の動き`;
+  }
+
+  /* ダイヤグラム（行動表）上で人間が組み直す（2026-08-26 本人要望）。
+     投げの白抜き丸をクリック→受け手（演者・手）と高さを指定。指定は音符の fix として持ち、
+     スケジューラーが計画時の制約として尊重する。指定どおりに投げられない場合は
+     自動割り当てで鳴らし、警告に出す（破綻で止めない）。
+     編集すると署名が変わり、焼き付け・確定seedは自動的に外れる（完成曲を守る仕組みと同居）。 */
+  let fixNoteIdx = null;
+  function setupFixEditor() {
+    const canvas = $("timeline");
+    const pop = $("fix-pop");
+
+    const openPop = (a, ev) => {
+      fixNoteIdx = a.noteIdx;
+      const note = state.melody.notes[a.noteIdx];
+      const fix = note.fix || {};
+      // 受け手の選択肢は人数に合わせて作り直す
+      const sel = $("fp-catch");
+      sel.innerHTML = '<option value="">自動</option>';
+      for (let p = 0; p < state.cfg.nPerformers; p++) {
+        for (const h of [0, 1]) {
+          const o = document.createElement("option");
+          o.value = p + ":" + h;
+          o.textContent = `${TOREI.perfName(p)} の${["左手", "右手"][h]}`;
+          sel.appendChild(o);
+        }
+        const o2 = document.createElement("option");
+        o2.value = p + ":";
+        o2.textContent = `${TOREI.perfName(p)}（手は自動）`;
+        sel.appendChild(o2);
+      }
+      sel.value = fix.catchPerf != null
+        ? fix.catchPerf + ":" + (fix.catchHand != null ? fix.catchHand : "") : "";
+      $("fp-level").value = fix.level || "";
+      $("fp-title").textContent =
+        `${TOREI.noteName(note.midi)}（${TOREI.perfName(a.perf)}が投げる音）の編集`;
+      // クリック位置の近くに出す（scroll-area基準の絶対配置）
+      const area = canvas.parentElement;
+      const ar = area.getBoundingClientRect();
+      pop.hidden = false;
+      pop.style.left = Math.min(ev.clientX - ar.left + area.scrollLeft + 12,
+        area.scrollWidth - pop.offsetWidth - 8) + "px";
+      pop.style.top = (canvas.offsetTop + 8) + "px";
+    };
+    const closePop = () => { pop.hidden = true; fixNoteIdx = null; };
+
+    canvas.addEventListener("click", (ev) => {
+      const r = canvas.getBoundingClientRect();
+      const a = TOREI.timeline.throwAt(state, ev.clientX - r.left, ev.clientY - r.top);
+      if (!a) { closePop(); return; }
+      // 和音の音は編集対象外（キャッチの手が和音の成立条件そのものなので）
+      const cnt = state.melody.notes.filter(n => Math.abs(n.beat - state.melody.notes[a.noteIdx].beat) < 1e-6).length;
+      if (cnt >= 2) { showNotice("和音の音は編集できません（キャッチの手が和音の成立条件のため）"); return; }
+      openPop(a, ev);
+    });
+    canvas.addEventListener("mousemove", (ev) => {
+      const r = canvas.getBoundingClientRect();
+      canvas.style.cursor = TOREI.timeline.throwAt(state, ev.clientX - r.left, ev.clientY - r.top) ? "pointer" : "";
+    });
+
+    $("fp-apply").addEventListener("click", () => {
+      if (fixNoteIdx == null) return;
+      const note = state.melody.notes[fixNoteIdx];
+      const v = $("fp-catch").value;
+      const lv = +$("fp-level").value || null;
+      const fix = {};
+      if (v) {
+        const [p, h] = v.split(":");
+        fix.catchPerf = +p;
+        if (h !== "") fix.catchHand = +h;
+      }
+      if (lv) fix.level = lv;
+      note.fix = (fix.catchPerf != null || fix.level) ? fix : null;
+      closePop();
+      recompute();
+      updateClearFixesBtn();
+    });
+    $("fp-clear").addEventListener("click", () => {
+      if (fixNoteIdx == null) return;
+      state.melody.notes[fixNoteIdx].fix = null;
+      closePop();
+      recompute();
+      updateClearFixesBtn();
+    });
+    $("fp-close").addEventListener("click", closePop);
+
+    $("btn-clear-fixes").addEventListener("click", () => {
+      for (const n of state.melody.notes) n.fix = null;
+      recompute();
+      updateClearFixesBtn();
+    });
+  }
+  function updateClearFixesBtn() {
+    const btn = $("btn-clear-fixes");
+    if (btn) btn.hidden = !state.melody.notes.some(n => n.fix);
   }
 
   /* 舞台の名札を直接クリックして書き換える（2026-08-26 本人要望）。
@@ -896,7 +991,7 @@
 
   function takeBarSnapshot() {
     barSnapshot = {
-      notes: state.melody.notes.map(n => ({ beat: n.beat, midi: n.midi })),
+      notes: state.melody.notes.map(n => ({ beat: n.beat, midi: n.midi, fix: n.fix || null })),
       loop: state.loop ? { ...state.loop } : null,
       pos: state.pos,
     };
@@ -1159,7 +1254,7 @@
     state.melody = {
       bpm: data.bpm,
       beatsPerBar: data.beatsPerBar,
-      notes: data.notes.map(n => ({ beat: n.beat, midi: n.midi })),
+      notes: data.notes.map(n => ({ beat: n.beat, midi: n.midi, fix: n.fix || null })),
     };
     state.cfg.nPerformers = data.performers;
     state.cfg.flight = data.flight;
@@ -1272,6 +1367,7 @@
     // どう変わっても振付が動かない（tools/freeze.mjs で生成）
     const fz = (TOREI.FROZEN || {})[p.id];
     freezeSeed(fz ? fz.seed : (TOREI.SEEDS || {})[p.id], fz || null);
+    updateClearFixesBtn();
     recompute();
     scrollToSongHead();
   }
@@ -1306,6 +1402,7 @@
 
   function init() {
     setupStageRename();   // 舞台の名札をクリックで編集（2026-08-26）
+    setupFixEditor();     // ダイヤグラム上で投げの受け手・高さを編集（2026-08-26）
     const sel = $("sel-preset");
     // 4人以上前提の曲は選べなくする（2026-08-23 本人指示）。データ自体は
     // TOREI.SONGS / tools/analyze.mjs 側にそのまま残るので、後で戻すのも解析も可能

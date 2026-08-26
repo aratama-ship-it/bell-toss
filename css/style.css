@@ -328,6 +328,31 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
   border-left: 3px solid var(--brass);
   border-radius: 0 6px 6px 0;
 }
+/* ダイヤグラム上の投げ編集ポップオーバー（2026-08-26 本人要望「人間が組み直せる
+   インターフェース。ダイヤグラムのようになっていると完璧」）。
+   行動表がそのダイヤグラム。投げをクリック→その場で受け手・高さを指定する */
+#fix-pop {
+  position: absolute;
+  z-index: 12;
+  background: var(--bg);
+  border: 1px solid var(--brass);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(44,49,58,0.18);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 190px;
+}
+#fix-pop[hidden] { display: none; }
+.fp-title { font-weight: 600; color: var(--ink); font-size: 12px; }
+#fix-pop label { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); }
+#fix-pop select { flex: 1; font-size: 12px; padding: 2px 4px; }
+.fp-btns { display: flex; gap: 6px; }
+.fp-btns button { font-size: 11.5px; padding: 4px 8px; }
+#btn-clear-fixes { font-size: 11px; margin-left: 6px; }
+
 .cue-start b {
   color: var(--ink-soft);
   font-weight: 600;

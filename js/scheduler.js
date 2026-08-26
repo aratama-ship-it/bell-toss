@@ -316,7 +316,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   };
 
   const notes = melody.notes
-    .map((n, i) => ({ t: n.beat * spb, beat: n.beat, midi: n.midi, idx: i }))
+    .map((n, i) => ({ t: n.beat * spb, beat: n.beat, midi: n.midi, idx: i, fix: n.fix || null }))
     .sort((a, b) => a.t - b.t || a.midi - b.midi);
 
   /* --- フレーズ末の判定（2026-08-23 本人方針）---
@@ -618,7 +618,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
      ring を perf の hand(handIdx) が投げ、キャッチ時刻 t で鳴らす。
      forceCatch指定時（保持キャッチ和音用）: キャッチ手を{perf,hand,chordRing}に固定し、
      その手が chordRing を静かに持ったままでも「和音」としてキャッチを許可する。 */
-  function planToss(ring, perf, handIdx, t, isNew, forceCatch) {
+  function planToss(ring, perf, handIdx, t, isNew, forceCatch, fix) {
     if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
     if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
 
@@ -655,6 +655,11 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       if (b >= C.FLIGHT_MIN && b <= C.FLIGHT_MAX) fCands.push(b);
       if (d > 0 && a >= C.FLIGHT_MIN && a <= C.FLIGHT_MAX) fCands.push(a);
     }
+    // 人間の編集（ダイヤグラム上の指定。2026-08-26）: 高さの段が指定されていれば
+    // その段に対応する滞空だけを候補にする
+    const fCandsUse = (fix && fix.level)
+      ? fCands.filter(f => TOREI.throwLevel(f) === fix.level)
+      : fCands;
 
     // 1つの (f, lead, 取得時間, リング準備時刻) の組について実行可能性を判定
     const tryWindow = (f, lead, aDur, ready, aFrom) => {
@@ -721,7 +726,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     const push = (w, kind) => { if (w) { w.route = kind; opts.push(w); } };
 
     // (a) 直前取得
-    for (const f of fCands) {
+    for (const f of fCandsUse) {
       const w = tryWindow(f, 0, acqDur, ring.readyAt, acqFrom);
       if (w) { w.acqDur = acqDur; w.acqFrom = acqFrom; push(w, "jit"); break; }
     }
@@ -784,9 +789,15 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     // forceCatch指定時は「保持キャッチ和音」用に、その特定の(演者,手)だけを候補にする
     // （その手はforceCatch.chordRingを静かに持ったままキャッチを迎え、両方鳴って和音になる）。
     let bestCatch = null;
+    // 人間の編集: 受け手（演者・手）が指定されていれば候補をそこに絞る。
+    // 和音の強制キャッチ（forceCatch）が最優先（和音は編集対象外）
     const catchTargets = forceCatch
       ? [[forceCatch.perf, forceCatch.hand]]
-      : perfs.flatMap(q => [[q, 0], [q, 1]]);
+      : (fix && fix.catchPerf != null)
+        ? (fix.catchHand != null
+            ? [[perfs[fix.catchPerf], fix.catchHand]]
+            : [[perfs[fix.catchPerf], 0], [perfs[fix.catchPerf], 1]])
+        : perfs.flatMap(q => [[q, 0], [q, 1]]);
     for (const [q, c] of catchTargets) {
       const isSelf = q.id === perf.id;
       if (!isSelf && passCost === Infinity) continue;
@@ -1218,14 +1229,33 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 
   /* --- 1音符を独立に割り当てる（和音でない場合の通常経路） --- */
   function scheduleNoteIndependently(note) {
-    const candidates = [];
+    let candidates = [];
+    let fix = note.fix || null;
 
-    for (const ring of rings) {
-      if (ring.midi !== note.midi) continue;
-      const perf = perfs[ring.owner];
-      for (let h = 0; h < 2; h++) {
-        const p = planToss(ring, perf, h, note.t, false);
-        if (p) candidates.push(p);
+    const collectToss = (fx) => {
+      const out = [];
+      for (const ring of rings) {
+        if (ring.midi !== note.midi) continue;
+        const perf = perfs[ring.owner];
+        for (let h = 0; h < 2; h++) {
+          const p = planToss(ring, perf, h, note.t, false, undefined, fx);
+          if (p) out.push(p);
+        }
+      }
+      return out;
+    };
+    candidates = collectToss(fix);
+
+    // 人間の編集（ダイヤグラム上の指定）どおりでは投げられない場合、指定を外して鳴らす。
+    // 「編集は受け付けて、破綻は警告で示す」（2026-08-26 本人方針）。音を落とすより
+    // 自動で鳴らして、指定どおりにできなかったことを警告に出す方が稽古の役に立つ
+    if (fix && !candidates.some(p => p.kind === "toss")) {
+      const free = collectToss(null);
+      if (free.some(p => p.kind === "toss")) {
+        candidates = free;
+        warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
+          msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: 指定どおり（受け手や高さの編集）には投げられないため、自動の割り当てで鳴らしています` });
+        fix = null;
       }
     }
 
@@ -1238,7 +1268,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         const ownsSame = rings.some(r => r.midi === note.midi && r.owner === perf.id);
         for (let h = 0; h < 2; h++) {
           const ghost = { id: -1, midi: note.midi, owner: perf.id, loc: "stand", readyAt: C.PREP, hand: null };
-          const p = planToss(ghost, perf, h, note.t, true);
+          const p = planToss(ghost, perf, h, note.t, true, undefined, fix);
           if (p) { if (ownsSame) p.cost += 2.5; candidates.push(p); }
         }
       }
