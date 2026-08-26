@@ -79,6 +79,12 @@ TOREI.EFFORT = {
   // 0.3以上にすると回数は減るがパス率が1〜2pt落ちる）。
   wakiArm: 0.1,
   selfRun: 0.4,      // 自分投げの連続への累進減点（3連続から。順番にパスが混ざる編成を好む）
+  // 投げの高さのバリエーション（2026-08-26 本人方針「たくさんあるほどよし。全体的には低く、
+  // 定期的に高く投げるバリエーションがあると見栄えがとても良い。とても強い重みで」）
+  varietyLevel: 0.6, // 使われた高さの段の種類1つ増えるごとの加点
+  // 高い投げ（高さ4以上）が曲の四分区間それぞれに現れるごとの加点。
+  // 「とても強い重みで」（本人）。実測: 2.5未満だと散らばり2区間の解が3区間の解に勝つ
+  varietyHigh: 3.0,
 };
 
 /* 上の指標を実測する。ブラウザの採点・最適化ツール・点検ツールが同じ数値を見るよう1か所に置く */
@@ -197,12 +203,25 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   const effort = em.tight * E.gapCost + em.tooHigh * E.levelCost
     + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass
     + em.armCatches * E.wakiArm;
+  // 投げの高さのバリエーション（2026-08-26 本人方針）。段の種類の多さと、
+  // 高い投げ（高さ4以上）が曲全体に「定期的に」散らばっていることを強く加点する。
+  // 散らばりは曲を四分割して「高い投げを含む区間の数」で測る（数だけだと一箇所に固まる）。
+  let varietyBonus = 0;
+  if (throws.length) {
+    const lv = throws.map(a => TOREI.throwLevel(a.flight));
+    const distinct = new Set(lv).size;
+    const t0 = Math.min(...throws.map(a => a.t));
+    const t1 = Math.max(...throws.map(a => a.t)) + 0.001;
+    const covered = new Set(throws.filter((a, i) => lv[i] >= 4)
+      .map(a => Math.min(3, Math.floor((a.t - t0) / (t1 - t0) * 4)))).size;
+    varietyBonus = (distinct - 1) * E.varietyLevel + covered * E.varietyHigh;
+  }
   return {
     score: fails * 1000 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
-      + fuss + passFloor + openMiss + effort + selfRunCost - passBonus,
+      + fuss + passFloor + openMiss + effort + selfRunCost - passBonus - varietyBonus,
     fails, shakes, repShakes, chordMiss, passRate, rings: r.rings.length,
     handoffs, prepWaki, openPass: openMiss === 0, effort, em,
-    selfRunCost, maxSelfRun,
+    selfRunCost, maxSelfRun, varietyBonus,
   };
 };
 
@@ -284,6 +303,17 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     : passAggressive ? -0.7 : -0.1;
   const EPS = 1e-6;
   const spb = 60 / melody.bpm;
+
+  // 「見せ場」の音（2026-08-26 本人方針「定期的に高く投げると見栄えがとても良い」）。
+  // シードごとに音の約2割を見せ場とし、その音では高い投げほど計画コストを安くする。
+  // 採点側のバリエーション加点（scoreResult）と対になっていて、こちらが「高い投げを作る」、
+  // 採点が「良く散らばったシードを選ぶ」。見せ場の位置はシードで変わるので、
+  // 探索を増やすほど散らばりの良い配置が見つかる。
+  const isShowcase = (t) => {
+    let h = (Math.round(t * 1000) * 2654435761 + (seed + 1) * 40503) >>> 0;
+    h ^= h >>> 15; h = (h * 2246822519) >>> 0;
+    return (h % 100) < 18;
+  };
 
   const notes = melody.notes
     .map((n, i) => ({ t: n.beat * spb, beat: n.beat, midi: n.midi, idx: i }))
@@ -830,7 +860,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       restock: found.restock || null,
       throwTime, flight: f,
       cost: (storeDur + found.acqDur) + perf.load * 0.3 + (isNew ? 3 : 0)
-        + Math.abs(cfg.flight - f) * 0.3 + lead * 0.05
+        // 見せ場の音は高い投げほど安く、それ以外は希望の滞空に近いほど安い
+        + (isShowcase(t) ? (C.FLIGHT_MAX - f) * 0.6 : Math.abs(cfg.flight - f) * 0.3)
+        + lead * 0.05
         + (found.restock ? 0.5 : 0) + bestCatch.cc,
     };
   }
