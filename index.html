@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-17</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-18</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -154,6 +154,8 @@
         title="再生位置の小節を消し、以降の音符を前へつめる（この小節の音符は消える）">−小節を削除</button>
       <button id="btn-bar-undo" class="mini-wide" hidden
         title="直前の小節操作を取り消す">取り消す</button>
+      <button id="btn-bar-lock" class="mini-wide"
+        title="再生位置の小節の全ての投げを今の形のまま凍結する。もう一度押すと解除">🔒 この小節をロック</button>
     </div>
     <div class="nav-row">
       <div class="nav-gutter">全体</div>
@@ -266,6 +268,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js?v=6"></script>
 <script src="js/stage.js?v=11"></script>
-<script src="js/main.js?v=40"></script>
+<script src="js/main.js?v=41"></script>
 </body>
 </html>

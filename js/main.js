@@ -370,6 +370,50 @@
       renderStrip();
     });
 
+    // 小節単位のロック（2026-08-26 本人要望「2もほしい」= この小節は全部このまま）。
+    // 対象は再生位置の小節。中の全投げに個別ロックと同じ凍結を掛ける。
+    // 全部ロック済みの小節でもう一度押すと、その小節だけ解除
+    $("btn-bar-lock").addEventListener("click", () => {
+      if (!state.result) return;
+      const EPS = 1e-6;
+      const bpb = state.melody.beatsPerBar || 4;
+      const bar = Math.floor(Math.max(0, state.pos / spb()) / bpb);
+      const a = bar * bpb, b = a + bpb;
+      const idxs = [];
+      state.melody.notes.forEach((n, i) => {
+        if (n.beat < a - EPS || n.beat >= b - EPS) return;
+        // 和音の音はロック対象外（キャッチの手が和音の成立条件そのもの）
+        const cnt = state.melody.notes.filter(m => Math.abs(m.beat - n.beat) < EPS).length;
+        if (cnt >= 2) return;
+        idxs.push(i);
+      });
+      if (!idxs.length) { showNotice(`${bar + 1}小節目にロックできる投げがありません`); return; }
+      const allLocked = idxs.every(i => state.melody.notes[i].fix && state.melody.notes[i].fix.locked);
+      fixUndo = snapshotFixes();
+      if (allLocked) {
+        for (const i of idxs) state.melody.notes[i].fix = null;
+        recompute(); updateClearFixesBtn(); renderStrip();
+        showNotice(`${bar + 1}小節目のロックを外しました（${idxs.length}投）`);
+        return;
+      }
+      let locked = 0;
+      for (const i of idxs) {
+        const th = throwOf(i);
+        if (!th) continue;   // 振りで鳴る音などはそのまま
+        state.melody.notes[i].fix = {
+          locked: true,
+          throwPerf: th.perf, throwHand: th.hand,
+          catchPerf: th.catchPerf, catchHand: th.catchHand,
+          level: TOREI.throwLevel(th.flight),
+        };
+        locked++;
+      }
+      recompute(); updateClearFixesBtn(); renderStrip();
+      const dropped = (state.result.warnings || []).filter(w => idxs.includes(w.noteIdx)).length;
+      showNotice(`${bar + 1}小節目の${locked}投をロックしました`
+        + (dropped ? `（うち${dropped}投は指定どおりにできず警告が出ています）` : "。他を編集しても動きません"));
+    });
+
     // recompute後にストリップを追随させるための公開
     refreshEditStrip = renderStrip;
   }
