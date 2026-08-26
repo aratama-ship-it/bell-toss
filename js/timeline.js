@@ -232,13 +232,20 @@ TOREI.timeline = (() => {
         ctx.strokeStyle = color;
         ctx.lineWidth = isSel ? 3.2 : 1.8;
         arc();
-        // 人間が編集した音（fix）は金の四角で囲む
+        // 人間が編集した音（fix）は金の四角、ロック（譲れないポイント）は鍵マーク
         const fx = a.noteIdx != null && state.melody.notes[a.noteIdx]
           ? state.melody.notes[a.noteIdx].fix : null;
         if (fx) {
           ctx.strokeStyle = "rgba(169,130,47,0.9)";
           ctx.lineWidth = 1.4;
           ctx.strokeRect(x1 - 7, y1 - 7, 14, 14);
+          if (fx.locked) {
+            ctx.font = "9px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillStyle = "rgba(169,130,47,1)";
+            ctx.fillText("🔒", x1, y1 - 10);
+            ctx.textAlign = "left";
+          }
         }
         // 投げ点（白抜き丸）。選択中は大きく
         ctx.fillStyle = "#f8f5ee";

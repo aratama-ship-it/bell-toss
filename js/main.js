@@ -208,6 +208,12 @@
         (v) => applyFix({ level: v === "" ? null : +v }));
 
       $("es-undo").disabled = !fixUndo;
+      const locked = !!(note.fix && note.fix.locked);
+      const lockBtn = $("es-lock");
+      lockBtn.textContent = locked ? "🔓 ロックを外す" : "🔒 この投げをロック";
+      lockBtn.classList.toggle("locked", locked);
+      // ロック中は個別のセグメント操作を無効化（凍結の意味を守る）
+      for (const b of document.querySelectorAll(".es-seg button")) b.disabled = locked;
       TOREI.timeline.setSelection(selNote);
       drawTimelineOnly();
     };
@@ -317,6 +323,31 @@
       const stopAt = a.t + a.flight + 1.0;
       setTimeout(() => { if (playing) stopPlayback(); }, (stopAt - state.pos) * 1000 / 1);
     });
+    // ロック＝譲れないポイント（2026-08-26 本人要望「修正を加えると他が勝手に変わる。
+    // ここだけは譲れない、を作れるように」）。今の実現形（投げ手・受け手・高さ）を
+    // そのまま fix に写して凍結する。以後どこを編集しても、この投げは動かない。
+    $("es-lock").addEventListener("click", () => {
+      const a = selNote != null ? throwOf(selNote) : null;
+      if (!a) return;
+      const note = state.melody.notes[selNote];
+      if (note.fix && note.fix.locked) {
+        fixUndo = snapshotFixes();
+        note.fix = null;                       // 解除は「おまかせ」へ戻す
+        recompute(); updateClearFixesBtn(); renderStrip();
+        setStatus('<span class="ok">ロックを外しました（おまかせに戻りました）</span>');
+        return;
+      }
+      fixUndo = snapshotFixes();
+      note.fix = {
+        locked: true,
+        throwPerf: a.perf, throwHand: a.hand,
+        catchPerf: a.catchPerf, catchHand: a.catchHand,
+        level: TOREI.throwLevel(a.flight),
+      };
+      recompute(); updateClearFixesBtn(); renderStrip();
+      setStatus('<span class="ok">ロックしました。</span>他を編集してもこの投げは動きません');
+    });
+
     $("es-auto").addEventListener("click", () => {
       if (selNote == null) return;
       applyFix({ catchPerf: null, catchHand: null, level: null });

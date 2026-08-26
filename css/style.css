@@ -383,6 +383,8 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
 .es-seg button small { display: block; font-size: 8.5px; line-height: 1; opacity: 0.75; }
 .es-actions { display: flex; gap: 6px; }
 .es-actions button { font-size: 11.5px; padding: 7px 10px; }
+#es-lock.locked { background: var(--brass); border-color: var(--brass); color: #f8f5ee; font-weight: 600; }
+.es-seg button:disabled { opacity: 0.45; cursor: default; }
 .es-status { flex-basis: 100%; font-size: 11.5px; color: var(--ink-soft); min-height: 15px; }
 .es-status .ok { color: var(--brass); font-weight: 600; }
 .es-status .warn { color: var(--warn); font-weight: 600; cursor: pointer; text-decoration: underline; }

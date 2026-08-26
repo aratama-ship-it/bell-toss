@@ -217,7 +217,7 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
     varietyBonus = (distinct - 1) * E.varietyLevel + covered * E.varietyHigh;
   }
   return {
-    score: fails * 1000 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
+    score: fails * 1000 + (r.fixDrops || 0) * 50 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
       + fuss + passFloor + openMiss + effort + selfRunCost - passBonus - varietyBonus,
     fails, shakes, repShakes, chordMiss, passRate, rings: r.rings.length,
     handoffs, prepWaki, openPass: openMiss === 0, effort, em,
@@ -380,6 +380,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   // 空中にあるリングの区間 {perf, from, to} — スタンドへ行ける時間の判定に使う
   const airborne = [];
   const warnings = [];
+  let fixDrops = 0;   // 人間の指定（ロック含む）を守れず緩めた回数。採点で重く罰する
   const noteResults = [];
 
   const pitchCount = (midi) => rings.filter(r => r.midi === midi).length;
@@ -1240,7 +1241,11 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       for (const ring of rings) {
         if (ring.midi !== note.midi) continue;
         const perf = perfs[ring.owner];
+        // ロック（譲れないポイント）は投げ手側も固定する（2026-08-26 本人要望）。
+        // 受け手だけの固定では、再探索のたびに投げ手が変わって見た目が動いてしまう
+        if (fx && fx.throwPerf != null && perf.id !== fx.throwPerf) continue;
         for (let h = 0; h < 2; h++) {
+          if (fx && fx.throwHand != null && h !== fx.throwHand) continue;
           const p = planToss(ring, perf, h, note.t, false, undefined, fx);
           if (p) out.push(p);
         }
@@ -1253,12 +1258,30 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     // 「編集は受け付けて、破綻は警告で示す」（2026-08-26 本人方針）。音を落とすより
     // 自動で鳴らして、指定どおりにできなかったことを警告に出す方が稽古の役に立つ
     if (fix && !candidates.some(p => p.kind === "toss")) {
-      const free = collectToss(null);
-      if (free.some(p => p.kind === "toss")) {
-        candidates = free;
+      // 段階的に緩める: まず投げ手側だけ外す（受け手・高さは守る）→ それでも駄目なら全部外す。
+      // どの段でも fixDrops を数え、採点が「指定を守れた編成」を強く選ぶようにする
+      let relaxed = null;
+      if (fix.throwPerf != null || fix.throwHand != null) {
+        const partial = { catchPerf: fix.catchPerf, catchHand: fix.catchHand, level: fix.level };
+        const cands2 = collectToss(partial);
+        if (cands2.some(p => p.kind === "toss")) {
+          relaxed = { candidates: cands2, fix: partial,
+            msg: `投げ手の指定どおりにできないため、投げ手だけ自動にしています（受け手と高さは指定どおり）` };
+        }
+      }
+      if (!relaxed) {
+        const free = collectToss(null);
+        if (free.some(p => p.kind === "toss")) {
+          relaxed = { candidates: free, fix: null,
+            msg: `指定どおり（受け手や高さの編集）には投げられないため、自動の割り当てで鳴らしています` };
+        }
+      }
+      if (relaxed) {
+        candidates = relaxed.candidates;
         warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
-          msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: 指定どおり（受け手や高さの編集）には投げられないため、自動の割り当てで鳴らしています` });
-        fix = null;
+          msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: ${relaxed.msg}` });
+        fix = relaxed.fix;
+        fixDrops++;
       }
     }
 
@@ -1447,7 +1470,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     r.label = base + (perPitch[r.midi] > 1 ? "①②③"[r.pitchIdx - 1] : "");
   }
 
-  return { actions, rings, warnings, noteResults, minT };
+  return { actions, rings, warnings, noteResults, minT, fixDrops };
 };
 
 /* 行動表テキスト（練習用）を生成 */
