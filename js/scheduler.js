@@ -40,6 +40,10 @@ TOREI.SCHED = {
   T_HANDOFF_PARK: 0.2,
   // 脇へ挟んだ手と違う手で抜くときの割高さ（2026-08-26 本人談。基本は同じ手で抜く）
   WAKI_WRONG_HAND: 2.5,
+  // 逆の手が空いているのに脇側の腕で取ったときの割高さ（2026-08-26 本人指示
+  // 「もう片方の手が空いているときは、挟んでいない方の手で取ることを優先」）。
+  // 実質的に強制だが、逆の手が使えない場面では従来どおり脇側の腕で取れる（悪くはない、の扱い）
+  WAKI_ARM_FORCE: 4.0,
   // 脇を使っている側の腕でキャッチするときの割高さ（計画時のコスト。禁止ではなく回避）。
   // 実測で釣り合いの良い点（全34曲・探索800）: 0.2→397回/パス84.9%、0.5→346回/83.8%、
   // 0.8→295回/81.0%。0.5より上げても回数の減りに対してパス率の代償が大きい。
@@ -764,8 +768,16 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // 逆の手を完全に禁じると交差の動きが消えるので、わずかな差にとどめて必要な時は選べるようにする。
       const selfCost = c === handIdx ? 0.2 : 0.22;
       // ★脇にリングを挟んでいる側の腕でキャッチするのは避ける（2026-08-25 本人指摘）。
-      // その腕は自由が利かない。禁止ではなく割高にして、他に手が無ければ使う。
-      const armCost = wakiSideBusy(q, c, t) ? C.WAKI_ARM_COST : 0;
+      // さらに、逆の手がその瞬間空いているなら空いている方を強く優先する
+      // （2026-08-26 本人指示。空いている手を遊ばせて塞がった側の腕で取るのは不自然）。
+      // 逆の手も使えない場面では従来の弱い割高にとどめ、脇側の腕で取ることを許す。
+      let armCost = 0;
+      if (wakiSideBusy(q, c, t)) {
+        const oth = q.hands[1 - c];
+        const othUsable = isFree(oth, t - C.T_RECOVER, t + C.T_CATCH)
+          && !holdingAt(oth, t) && !wakiSideBusy(q, 1 - c, t);
+        armCost = othUsable ? C.WAKI_ARM_FORCE : C.WAKI_ARM_COST;
+      }
       const cc = (isSelf ? selfCost : passCost) + q.load * 0.3 + busySoon + armCost;
       if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc, chord: isChord };
     }
