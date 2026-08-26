@@ -52,7 +52,7 @@
     return JSON.stringify([
       state.melody.bpm, state.melody.beatsPerBar,
       state.melody.notes.map(n => [n.beat, n.midi]),
-      c.nPerformers, c.flight, c.wakiCap, c.maxDup, c.allowShake, c.standTime, c.passMode,
+      c.nPerformers, c.flight, c.wakiCap, c.maxDup, c.maxRings || null, c.allowShake, c.standTime, c.passMode,
       c.effort || null,
     ]);
   }
@@ -1153,6 +1153,7 @@
     state.cfg.flight = data.flight;
     state.cfg.wakiCap = data.wakiCap;
     state.cfg.maxDup = data.maxDup;
+    state.cfg.maxRings = data.maxRings || null;
     state.cfg.allowShake = data.allowShake;
     state.cfg.standTime = data.standTime;
     state.cfg.passMode = data.passMode;
@@ -1165,7 +1166,7 @@
     $("inp-waki").value = data.wakiCap;
     $("inp-stand").value = data.standTime;
     $("sel-pass").value = data.passMode;
-    $("inp-dup").value = data.maxDup;
+    $("inp-rings").value = data.maxRings || "";
     $("inp-shake").checked = data.allowShake;
     updateFlightHeight();
 
@@ -1246,12 +1247,11 @@
       $("flight-val").textContent = p.flight.toFixed(2);
       updateFlightHeight();
     }
-    // 同音リング最大。全曲が明示した値を持つ（2026-08-24修正）ので無条件に反映する。
-    // 「指定が無ければ引き継ぐ」流儀（flight等と同じ）にしていたら、ぶんぶんぶんの
-    // maxDup=1を見た後に他の曲へ切り替えると、その曲が本来必要とする値に戻らず
-    // 再生不可能になる事故が起きた（実機で11曲を確認）。
+    // 同音リング最大は曲データの値をそのまま使う（UIからは外した。2026-08-26 クライアント方針
+    // 「リング総数の上限だけ決めて、同音複製は自動であり」）。総数は maxRings で絞る。
     state.cfg.maxDup = p.maxDup || 2;
-    $("inp-dup").value = state.cfg.maxDup;
+    state.cfg.maxRings = p.maxRings || null;
+    $("inp-rings").value = state.cfg.maxRings || "";
     state.pos = 0;
     setLoop(null);
     // 配布用に確定させた編成があれば、探索せずそれを再現する（tools/optimize.mjs が選定）。
@@ -1434,8 +1434,10 @@
       state.cfg.passMode = $("sel-pass").value;
       recompute();
     });
-    $("inp-dup").addEventListener("change", () => {
-      state.cfg.maxDup = Math.max(1, Math.min(3, +$("inp-dup").value || 1));
+    $("inp-rings").addEventListener("change", () => {
+      const v = +$("inp-rings").value || 0;
+      state.cfg.maxRings = v >= 3 ? v : null;
+      $("inp-rings").value = state.cfg.maxRings || "";
       recompute();
     });
     $("inp-shake").addEventListener("change", () => {

@@ -315,6 +315,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   const noteResults = [];
 
   const pitchCount = (midi) => rings.filter(r => r.midi === midi).length;
+  // 曲中の同音リング追加もリング総数の上限に従う（2026-08-26 クライアント方針）。
+  // 上限は「用意する鈴の総数」なので、準備で数えて曲中で破る、では意味がない。
+  const canAddRing = (midi) => pitchCount(midi) < cfg.maxDup
+    && !(cfg.maxRings > 0 && rings.length >= cfg.maxRings);
 
   // 「次にこの音を使うのはいつか」の先読み（パーキング判断用）
   const pitchTimes = {};
@@ -346,16 +350,40 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     need.sort((a, b) => b.count - a.count || a.first - b.first);
     const capacity = 2 + cfg.wakiCap;
     const load = perfs.map(() => 0);
-    for (const item of need) {
-      for (let c = 0; c < item.copies; c++) {
-        let best = -1;
-        for (let i = 0; i < perfs.length; i++) {
-          if (load[i] >= capacity) continue;
-          if (best < 0 || load[i] < load[best]) best = i;
+    // ★リング総数の上限（2026-08-26 クライアント方針「上限だけ決めて同音もあり」）。
+    // 二段階で配る。まず各音高の1本目（無いとその音が一切鳴らせないので、上限に
+    // 関係なく必ず作る。超過は ring-summary の警告に出る）。次に残り枠へ複製を、
+    // 使用頻度の高い音高から順に足す。一段のループだと「頻度上位の複製」が
+    // 「頻度下位の1本目」より先に枠を食い、上限5なのに6本できる、が起きる。
+    const alloc = (midi) => {
+      let best = -1;
+      for (let i = 0; i < perfs.length; i++) {
+        if (load[i] >= capacity) continue;
+        if (best < 0 || load[i] < load[best]) best = i;
+      }
+      if (best < 0) return false; // 全員の手元が一杯（音高が多すぎる。警告は音符処理時に出る）
+      newRing(midi, best);
+      load[best]++;
+      return true;
+    };
+    if (cfg.maxRings > 0) {
+      // 上限あり: 先に各音1本、残り枠に複製。こうしないと頻度上位の複製が
+      // 頻度下位の1本目より先に枠を食い、「上限5なのに6本」が起きる。
+      for (const item of need) alloc(item.midi);
+      outer: for (const item of need) {
+        for (let c = 1; c < item.copies; c++) {
+          if (rings.length >= cfg.maxRings) break outer;
+          if (!alloc(item.midi)) break outer;
         }
-        if (best < 0) break; // 全員の手元が一杯（音高が多すぎる。警告は音符処理時に出る）
-        const r = newRing(item.midi, best);
-        load[best]++;
+      }
+    } else {
+      // 上限なし: 従来の配り順（音高ごとに1本目と複製を続けて割り当てる）。
+      // ★二段階方式に全面変更したら全曲でこの順に依存した解が崩れ、
+      // メリーさんはパス81%→42%上限まで落ちた（実測3000シード）。順序も仕様の一部。
+      for (const item of need) {
+        for (let c = 0; c < item.copies; c++) {
+          if (!alloc(item.midi)) break;
+        }
       }
     }
     // 開演前にスタンドから取り出して手・脇へ。1人ずつ順に（体ごと動くので並行できない）。
@@ -805,7 +833,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
             if (p) tossCandidates.push(p);
           }
         }
-        if (pitchCount(newNote.midi) < cfg.maxDup) {
+        if (canAddRing(newNote.midi)) {
           for (const p2 of perfs) {
             for (let h2 = 0; h2 < 2; h2++) {
               const ghost = { id: -1, midi: newNote.midi, owner: p2.id, loc: "stand", readyAt: C.PREP, hand: null };
@@ -1101,7 +1129,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 
     // 投げで間に合う既存リングがなければ、新しいリング（複製）を検討。
     // 同音を既に持つ演者には加点（同じ演者では速い連打を分担できないため、別の演者へ散らす）
-    if (!anyToss && pitchCount(note.midi) < cfg.maxDup) {
+    if (!anyToss && canAddRing(note.midi)) {
       for (const perf of perfs) {
         const ownsSame = rings.some(r => r.midi === note.midi && r.owner === perf.id);
         for (let h = 0; h < 2; h++) {
@@ -1122,7 +1150,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
           if (p) candidates.push(p);
         }
       }
-      if (pitchCount(note.midi) < cfg.maxDup) {
+      if (canAddRing(note.midi)) {
         for (const perf of perfs) {
           for (let h = 0; h < 2; h++) {
             const ghost = { id: -1, midi: note.midi, owner: perf.id, loc: "stand", readyAt: C.PREP, hand: null };

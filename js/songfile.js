@@ -17,6 +17,7 @@ TOREI.songfile = (() => {
       flight: state.cfg.flight,
       wakiCap: state.cfg.wakiCap,
       maxDup: state.cfg.maxDup,
+      maxRings: state.cfg.maxRings || null,
       allowShake: state.cfg.allowShake,
       notes: state.melody.notes.map(n => ({ beat: n.beat, midi: n.midi })),
     };

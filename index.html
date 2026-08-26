@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-3</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-4</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -65,7 +65,7 @@
         <option value="natural">自然に</option>
         <option value="off">なし</option>
       </select></label>
-    <label>同音リング最大 <input type="number" id="inp-dup" min="1" max="3" value="2"> 本</label>
+    <label title="用意するリングの総数の上限。空欄なら制限なし。同じ音のリングを複数本使う（連打対策）は自動で行われ、この上限の中に収まる">リング上限 <input type="number" id="inp-rings" min="3" max="20" placeholder="なし"> 本</label>
     <label class="check"><input type="checkbox" id="inp-shake" checked> 間に合わない音はフレーズ末でのみ振って鳴らす</label>
     <label class="av-sync" title="イヤホンやスピーカーの遅延で映像が音より先に動くとき、映像を遅らせて合わせる。Safariは遅延を自動検出できないため手動で調整する（Bluetoothなら150〜250msが目安）。この端末にだけ保存され、曲データには含まれない">
       音ズレ補正 <input type="range" id="inp-avsync" min="0" max="400" step="10" value="0">
@@ -218,16 +218,16 @@
 </footer>
 
 <script src="js/presets.js?v=3"></script>
-<script src="js/songfile.js?v=1"></script>
-<script src="js/songs.js?v=28"></script>
-  <script src="js/seeds.js?v=4"></script>
-<script src="js/scheduler.js?v=15"></script>
+<script src="js/songfile.js?v=2"></script>
+<script src="js/songs.js?v=29"></script>
+  <script src="js/seeds.js?v=5"></script>
+<script src="js/scheduler.js?v=16"></script>
 <script src="js/audio.js"></script>
 <script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js"></script>
 <script src="js/stage.js?v=10"></script>
-<script src="js/main.js?v=32"></script>
+<script src="js/main.js?v=33"></script>
 </body>
 </html>
