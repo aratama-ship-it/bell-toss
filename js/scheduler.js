@@ -1367,8 +1367,8 @@ TOREI.initialLayout = function (result, nPerformers) {
     const sl = slots[a.perf];
     if (!ring || !sl) continue;
     // 同じリングが脇へ回されるなら、その後のstoreで上書きする
-    const toWaki = result.actions.some(b => b.prep && b.type === "store" && b.ring === a.ring && b.to === "waki");
-    if (toWaki) sl.waki.push(ring);
+    const tuck = result.actions.find(b => b.prep && b.type === "store" && b.ring === a.ring && b.to === "waki");
+    if (tuck) sl.waki.push({ ring, side: 1 - tuck.hand });  // 挟む側は手の反対
     else sl.hands[a.hand] = ring;
     placed.add(a.ring);
   }
@@ -1386,7 +1386,7 @@ TOREI.layoutText = function (slot) {
   const parts = [];
   if (slot.hands[1]) parts.push(`右手 ${slot.hands[1].label}`);
   if (slot.hands[0]) parts.push(`左手 ${slot.hands[0].label}`);
-  for (const r of slot.waki) parts.push(`脇 ${r.label}`);
+  for (const w of slot.waki) parts.push(`${["左", "右"][w.side]}脇 ${w.ring.label}`);
   for (const r of slot.stand) parts.push(`スタンド ${r.label}`);
   return parts.length ? parts.join(" ／ ") : "手ぶら";
 };
@@ -1402,8 +1402,8 @@ TOREI.cueSheet = function (result, melody, cfg, perfId) {
     const ring = result.rings[a.ring];
     const hand = handName[a.hand];
     let text = null, kind = a.type;
-    if (a.type === "pickup") text = `${ring.label} を${a.from === "waki" ? "脇から取る" : "スタンドから取る"}`;
-    else if (a.type === "store") text = `${ring.label} を${a.to === "waki" ? "脇に挟む" : a.to === "otherhand" ? "逆の手へ持ち替える" : "スタンドに掛ける"}`;
+    if (a.type === "pickup") text = `${ring.label} を${a.from === "waki" ? `${["左", "右"][1 - a.hand]}脇から取る` : "スタンドから取る"}`;
+    else if (a.type === "store") text = `${ring.label} を${a.to === "waki" ? `${["左", "右"][1 - a.hand]}脇に挟む` : a.to === "otherhand" ? "逆の手へ持ち替える" : "スタンドに掛ける"}`;
     else if (a.type === "throw") {
       const to = a.pass ? `${TOREI.perfName(a.catchPerf)}へパス`
         : a.catchHand !== a.hand ? "自分の逆の手へ" : "自分へ";

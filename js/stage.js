@@ -28,7 +28,10 @@ TOREI.stage = (() => {
         x, floorY, handY,
         hands: [ { x: x - 20, y: handY }, { x: x + 20, y: handY } ],
         standX: x + 50,
-        wakiX: x - 10, wakiY: floorY - 88,
+        // 脇は左右に1か所ずつ（2026-08-26 本人指摘「脇に2つはない。左右に1個ずつ」）。
+        // 従来は1点に重ねて描いていたため、両脇が埋まると片側に2本挟んで見えた。
+        // 添字は手と同じ（0=画面左の腕の脇、1=右）。体側に寄せて描く。
+        wakiXs: [x - 13, x + 13], wakiY: floorY - 88,
         slots: 0,
       });
     }
@@ -45,10 +48,10 @@ TOREI.stage = (() => {
       const row = ring.slot % 4;
       return { x: p.standX + col * 26, y: p.floorY - 104 + row * 26 };
     };
-    const posWaki = (perfIdx, ring) => {
+    const posWaki = (perfIdx, side) => {
       // 脇に挟んだリングは体側に密着（横から見るので細い楕円に見える）
       const p = perfs[perfIdx];
-      return { x: p.wakiX - (ring.id % 2) * 5, y: p.wakiY };
+      return { x: p.wakiXs[side], y: p.wakiY };
     };
     const posHand = (perfIdx, hand) => {
       const p = perfs[perfIdx];
@@ -78,7 +81,7 @@ TOREI.stage = (() => {
           cur = { kind: "still", pos: to, since: a.t + a.dur, loc: "hand" };
         } else if (a.type === "store") {
           closeStill(a.t);
-          const to = a.to === "waki" ? posWaki(a.perf, ring)
+          const to = a.to === "waki" ? posWaki(a.perf, 1 - a.hand)
             : a.to === "otherhand" ? posHand(a.perf, 1 - a.hand)
             : posStand(a.perf, ring);
           segs.push({ t0: a.t, t1: a.t + a.dur, kind: "move", from: cur.pos, to, loc: "move" });
@@ -369,14 +372,16 @@ TOREI.stage = (() => {
       if (solo && i !== perfFilter) continue;
       const p = perfs[i];
       // 位置で判定する（owner は最終的な持ち主で、その時刻の所在を表さない）
-      const hasWaki = rings.some((r, ri) => positions[ri] && positions[ri].seg.loc === "waki"
-        && Math.abs(positions[ri].x - p.wakiX) < 30);
-      if (hasWaki) {
-        ctx.font = "9.5px 'Hiragino Sans', sans-serif";
-        ctx.fillStyle = "rgba(44,49,58,0.5)";
-        ctx.textAlign = "center";
-        ctx.fillText("脇", p.wakiX - 4, p.wakiY + 24);
-        ctx.textAlign = "left";
+      for (const wx of p.wakiXs) {
+        const hasWaki = rings.some((r, ri) => positions[ri] && positions[ri].seg.loc === "waki"
+          && Math.abs(positions[ri].x - wx) < 8);
+        if (hasWaki) {
+          ctx.font = "9.5px 'Hiragino Sans', sans-serif";
+          ctx.fillStyle = "rgba(44,49,58,0.5)";
+          ctx.textAlign = "center";
+          ctx.fillText("脇", wx, p.wakiY + 24);
+          ctx.textAlign = "left";
+        }
       }
     }
 

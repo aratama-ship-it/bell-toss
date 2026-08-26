@@ -603,7 +603,7 @@
       const parts = [];
       if (sl.hands[1]) parts.push(chip("右手", sl.hands[1]));
       if (sl.hands[0]) parts.push(chip("左手", sl.hands[0]));
-      for (const r of sl.waki) parts.push(chip("脇", r));
+      for (const w of sl.waki) parts.push(chip(["左脇", "右脇"][w.side], w.ring));
       for (const r of sl.stand) parts.push(chip("スタンド", r));
       if (!parts.length) parts.push('<span class="sl-empty">手ぶら</span>');
       // 名前は編集できる。演者名を直す場所を探して画面を下まで探させない
