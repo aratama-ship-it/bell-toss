@@ -13,7 +13,7 @@ TOREI.SEEDS = {
   "twinkle": 357,
   "tulip": 531,
   "mary": 417,
-  "ode": 130,
+  "ode": 92,
   "hayate": 171,
   "yotsutsuji": 39,
   "mitsudomoe": 81,

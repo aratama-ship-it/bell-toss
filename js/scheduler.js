@@ -131,7 +131,11 @@ TOREI.effortMetrics = function (r, cfg) {
    「画面に出る編成」がズレるため。 */
 TOREI.scoreResult = function (r, chordSpots, cfg) {
   const fails = r.noteResults.filter(x => x && x.kind === "fail").length;
-  const shakes = r.noteResults.filter(x => x && x.kind === "shake").length;
+  // 振りは2種類。救済振り（投げ損ない・フレーズ末限定）は重く、連打振り（意図した技法）は
+  // 軽く。ただし0にはしない: 投げられる連打（複製リングで交互に投げる）が可能なら
+  // そちらを選ばせる（振りはジャグリング要素がないため。2026-08-26）。
+  const shakes = r.noteResults.filter(x => x && x.kind === "shake" && !x.repeat).length;
+  const repShakes = r.noteResults.filter(x => x && x.kind === "shake" && x.repeat).length;
   const throws = r.actions.filter(a => a.type === "throw");
   const passes = throws.filter(a => a.pass).length;
   const passRate = throws.length ? passes / throws.length : 0;
@@ -161,9 +165,9 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
     + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass
     + em.armCatches * E.wakiArm;
   return {
-    score: fails * 1000 + shakes * 10 + chordMiss * 3 + r.rings.length * E.ringCost
+    score: fails * 1000 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
       + fuss + passFloor + openMiss + effort - passBonus,
-    fails, shakes, chordMiss, passRate, rings: r.rings.length,
+    fails, shakes, repShakes, chordMiss, passRate, rings: r.rings.length,
     handoffs, prepWaki, openPass: !!(firstCatch && firstCatch.pass), effort, em,
   };
 };
@@ -858,9 +862,17 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   function planShake(ring, perf, handIdx, note, isNew) {
     const t = note.t;
     if (!cfg.allowShake) return null;
-    // 振りはフレーズ末だけ。かつ曲全体で shakeCap 本まで（2026-08-23 本人方針）
-    if (!isPhraseEnd(note)) return null;
-    if (shakeCount >= shakeCap) return null;
+    // 連打（同音が直前にもある）の2音目以降は、キャッチしたリングをその場で振って鳴らせる
+    // （2026-08-26 本人承認。実演の自然な技法で、第九の連打を72BPMで成立させる鍵）。
+    // 「直前」の判定は物理で引く: 同じリングを投げ直すのに最低 T_CATCH+T_THROW+FLIGHT_MIN
+    // かかるので、それ未満の間隔の同音は投げでは絶対に鳴らせない＝振りの出番。
+    const repeatWin = C.T_CATCH + C.T_THROW + C.FLIGHT_MIN;
+    const isRepeat = notes.some(n => n.midi === note.midi
+      && n.t < note.t - EPS && note.t - n.t < repeatWin - EPS);
+    // 通常の振りはフレーズ末だけ・曲全体で shakeCap 本まで（2026-08-23 本人方針）。
+    // 連打振りはこの制限の外（意図した技法であって、投げ損ないの救済ではない）。
+    if (!isPhraseEnd(note) && !isRepeat) return null;
+    if (!isRepeat && shakeCount >= shakeCap) return null;
     if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
     if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
 
@@ -886,7 +898,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     if (storeTo === "stand" && !bodyFree(perf, chainStart, chainStart + storeDur)) return null;
 
     return {
-      kind: "shake", ring, perf, handIdx, isNew,
+      kind: "shake", ring, perf, handIdx, isNew, isRepeat,
       storeDur, storeTo, storedPoss, acqDur, acqFrom, acqStart,
       cost: (storeDur + acqDur) + perf.load * 0.6 + (isNew ? 3 : 0) + 10,
     };
@@ -1014,16 +1026,19 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         ring: ring.id, throwTime: plan.throwTime, flight: plan.flight, pass: isPass };
     } else {
       actions.push({ type: "shake", perf: perf.id, hand: plan.handIdx, ring: ring.id,
-        t, dur: C.T_SHAKE, noteIdx: note.idx, midi: note.midi });
+        t, dur: C.T_SHAKE, noteIdx: note.idx, midi: note.midi, repeat: !!plan.isRepeat });
       hand.busy.push([t, t + C.T_SHAKE]);
       if (plan.acqDur === 0 && !holdingAt(hand, t)) {
         hand.poss.push({ ring: ring.id, from: t, to: Infinity });
       }
       ring.readyAt = t + C.T_SHAKE;
-      noteResults[note.idx] = { kind: "shake", perf: perf.id, hand: plan.handIdx, ring: ring.id };
-      shakeCount++;  // 上限（shakeCap）の判定に使う
-      warnings.push({ noteIdx: note.idx, t, midi: note.midi,
-        msg: `${fmtTime(t)} の ${TOREI.noteName(note.midi)}: 投げが間に合わず、${TOREI.perfName(perf.id)}がフレーズ末で振って鳴らします（${shakeCount}/${shakeCap}本目）` });
+      noteResults[note.idx] = { kind: "shake", perf: perf.id, hand: plan.handIdx,
+        ring: ring.id, repeat: !!plan.isRepeat };
+      if (!plan.isRepeat) {
+        shakeCount++;  // 上限（shakeCap）の判定に使う。連打振りは意図した技法なので数えない
+        warnings.push({ noteIdx: note.idx, t, midi: note.midi,
+          msg: `${fmtTime(t)} の ${TOREI.noteName(note.midi)}: 投げが間に合わず、${TOREI.perfName(perf.id)}がフレーズ末で振って鳴らします（${shakeCount}/${shakeCap}本目）` });
+      }
     }
     holdPerf.load++;
 
@@ -1374,7 +1389,9 @@ TOREI.cueSheet = function (result, melody, cfg, perfId) {
       if (a.chordRole === "held") text = `持っていた${ring.label}も一緒に鳴る → ♪${TOREI.noteName(a.midi)}（和音）`;
       else if (a.chordRole === "new") text = `${from}${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}（和音）`;
       else text = `${from}${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`;
-    } else if (a.type === "shake") text = `${ring.label} を振って鳴らす → ♪${TOREI.noteName(a.midi)}`;
+    } else if (a.type === "shake") text = a.repeat
+      ? `${ring.label} を続けて振って鳴らす（連打）→ ♪${TOREI.noteName(a.midi)}`
+      : `${ring.label} を振って鳴らす → ♪${TOREI.noteName(a.midi)}`;
     if (!text) continue;
     const t = a.t;
     const label = t < 0 ? "準備" : `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
@@ -1415,7 +1432,7 @@ TOREI.actionText = function (result, melody, cfg) {
     if (a.type === "catch" && a.chordRole === "held") lines.push(`${m}  ${who}: 持っていた${ring.label}も一緒に鳴る → ♪${TOREI.noteName(a.midi)}（保持キャッチ和音）`);
     else if (a.type === "catch" && a.chordRole === "new") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}（和音：この手が持っていたリングも同時に鳴る）`);
     else if (a.type === "catch") lines.push(`${m}  ${who}: ${ring.label} をキャッチ → ♪${TOREI.noteName(a.midi)}`);
-    if (a.type === "shake") lines.push(`${m}  ${who}: ${ring.label} を振って鳴らす → ♪${TOREI.noteName(a.midi)} ※投げが間に合わない箇所`);
+    if (a.type === "shake") lines.push(`${m}  ${who}: ${ring.label} を${a.repeat ? "続けて振って鳴らす（連打）" : "振って鳴らす"} → ♪${TOREI.noteName(a.midi)}${a.repeat ? "" : " ※投げが間に合わない箇所"}`);
   }
   return lines.join("\n");
 };
