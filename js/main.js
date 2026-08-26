@@ -46,7 +46,7 @@
   // 曲を読み込んだ時点の楽譜・設定に対してだけ有効で、1音でも動かしたら捨てる。
   // 「編集した箇所を直す」のを忘れる事故が起きないよう、個々の編集操作に手を入れるのではなく
   // 署名を突き合わせて自動で外す（編集の入口はドラッグ・キー・小節操作・MIDI読込と多い）。
-  let seedSig = null, frozenSeed = null;
+  let seedSig = null, frozenSeed = null, frozenResult = null;
   function stateSig() {
     const c = state.cfg;
     return JSON.stringify([
@@ -56,10 +56,13 @@
       c.effort || null,
     ]);
   }
-  function freezeSeed(seed) {
+  function freezeSeed(seed, frozen) {
     frozenSeed = seed == null ? null : seed;
     state.cfg.seed = frozenSeed;
-    seedSig = frozenSeed == null ? null : stateSig();
+    seedSig = (frozenSeed == null && !frozen) ? null : stateSig();
+    // 完成曲は振付データそのものを持つ（seed再現ではなく再生。2026-08-26）。
+    // スケジューラーを改良しても完成曲の振付が変わらない唯一の保証
+    frozenResult = frozen || null;
   }
 
   function recompute() {
@@ -67,14 +70,20 @@
     // 楽譜か設定が変わっている間だけ、確定編成を外して探索に切り替える。
     // 編集を元に戻せば確定編成へ復帰する（外しっぱなしにすると、戻したのに
     // 配布版と違う振り付けのまま、という分かりにくい状態になる）。
-    if (frozenSeed != null) state.cfg.seed = (stateSig() === seedSig) ? frozenSeed : null;
+    const sigIntact = seedSig != null && stateSig() === seedSig;
+    if (frozenSeed != null) state.cfg.seed = sigIntact ? frozenSeed : null;
     // 小節操作以外の編集が入ったら「取り消す」を無効化する。
     // 古いスナップショットで新しい編集ごと巻き戻す事故を防ぐため
     if (!inBarOp && typeof invalidateBarUndo === "function" && barSnapshot) invalidateBarUndo();
     // 再計算でスケジュールが別物になるので、開きっぱなしのモーダルは閉じる
     // （古い動作列のまま操作させない）
     if (soloOpen) closeSolo();
-    state.result = TOREI.schedule(state.melody, state.cfg);
+    if (frozenResult && sigIntact) {
+      // 完成曲: 焼き付けた振付（js/frozen.js）をそのまま再生する。再計算しない
+      state.result = structuredClone(frozenResult);
+    } else {
+      state.result = TOREI.schedule(state.melody, state.cfg);
+    }
     const sp = spb();
     V.preBeats = Math.ceil(Math.max(0, -state.result.minT) / sp + 0.001);
     // 楽譜の幅は曲の長さに合わせる（64拍固定だと長い曲の後半が描画されない）
@@ -1259,7 +1268,10 @@
     setLoop(null);
     // 配布用に確定させた編成があれば、探索せずそれを再現する（tools/optimize.mjs が選定）。
     // 稽古する振り付けが開くたびに変わらないようにするのが目的で、速さは副次的な利点。
-    freezeSeed((TOREI.SEEDS || {})[p.id]);
+    // 完成曲（焼き付け）＞確定seed＞探索、の順。焼き付けはスケジューラーが
+    // どう変わっても振付が動かない（tools/freeze.mjs で生成）
+    const fz = (TOREI.FROZEN || {})[p.id];
+    freezeSeed(fz ? fz.seed : (TOREI.SEEDS || {})[p.id], fz || null);
     recompute();
     scrollToSongHead();
   }

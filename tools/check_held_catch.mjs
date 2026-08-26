@@ -26,7 +26,7 @@ import fs from "node:fs"; import vm from "node:vm"; import path from "node:path"
 const ROOT = process.cwd();
 globalThis.window = globalThis;
 globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-for (const f of ["js/presets.js","js/songs.js", "js/seeds.js","js/scheduler.js"])
+for (const f of ["js/presets.js","js/songs.js", "js/seeds.js","js/frozen.js","js/scheduler.js"])
   vm.runInThisContext(fs.readFileSync(path.join(ROOT,f),"utf8"),{filename:f});
 
 const R = (t) => Math.round(t * 1e6) / 1e6;
@@ -37,7 +37,8 @@ for (const s of TOREI.SONGS) {
   const cfg = {nPerformers:s.performers||3, flight:s.flight||1.2, wakiCap:1, maxDup:2, maxRings: s.maxRings || null,
                allowShake:true, standTime:s.standTime||2.0, passMode:s.passMode||"more"};
   cfg.seed = (TOREI.SEEDS || {})[s.id];   // 配布される編成そのものを検査する
-  const r = TOREI.schedule({bpm:s.bpm,beatsPerBar:s.beatsPerBar,notes:s.notes}, cfg);
+  const r = (TOREI.FROZEN && TOREI.FROZEN[s.id]) ? TOREI.FROZEN[s.id]
+    : TOREI.schedule({bpm:s.bpm,beatsPerBar:s.beatsPerBar,notes:s.notes}, cfg);
   const evs = [];
   for (const a of r.actions) {
     if (a.type==="catch") evs.push({t:R(a.t), kind:"in", p:a.perf,h:a.hand,ring:a.ring});

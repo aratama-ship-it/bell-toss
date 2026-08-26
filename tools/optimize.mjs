@@ -32,7 +32,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 function loadTorei() {
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-  for (const f of ["js/presets.js", "js/songs.js", "js/scheduler.js"]) {
+  for (const f of ["js/presets.js", "js/songs.js", "js/frozen.js", "js/scheduler.js"]) {
     const p = path.join(ROOT, f);
     vm.runInThisContext(fs.readFileSync(p, "utf8"), { filename: p });
   }
@@ -95,6 +95,10 @@ const bi = args.indexOf("--budget");
 const budget = bi >= 0 ? Number(args[bi + 1]) : 2000;
 const only = args.find(a => !a.startsWith("--") && a !== String(budget));
 
+/* 完成が確定した曲は探索し直さない（2026-08-26 本人「ぶんぶんぶんは完成形。保存」）。
+   採点や探索を改良しても、確定済みの振付が黙って変わることはあってはならない。 */
+const PINNED = { bunbun: 117 };
+
 const TOREI = loadTorei();
 const songs = only ? TOREI.SONGS.filter(s => s.id === only) : TOREI.SONGS;
 if (!songs.length) {
@@ -113,6 +117,18 @@ const seeds = {};
 const t0 = Date.now();
 let fails = 0, shakes = 0;
 for (const song of songs) {
+  if (PINNED[song.id] != null) {
+    const cfg = cfgFor(song), melody = melodyFor(song);
+    const cs = TOREI.countChordSpots(melody);
+    // 焼き付け済みならその振付を評価に使う（seed再現はアルゴリズム変更でズレるため）
+    const fz = TOREI.FROZEN && TOREI.FROZEN[song.id];
+    const r = fz || TOREI._scheduleOnce(melody, cfg, PINNED[song.id]);
+    const m = TOREI.scoreResult(r, cs, cfg);
+    seeds[song.id] = PINNED[song.id];
+    fails += m.fails; shakes += m.shakes;
+    console.log(line(song, PINNED[song.id], m, cs) + "  ★確定");
+    continue;
+  }
   const { best, chordSpots } = optimize(TOREI, song, budget);
   seeds[song.id] = best.seed;
   fails += best.m.fails;

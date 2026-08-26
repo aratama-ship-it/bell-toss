@@ -78,6 +78,7 @@ TOREI.EFFORT = {
   // 0.1が釣り合いの良い点（実測: 0で390回・0.1で301回とパス率を落とさず減り、
   // 0.3以上にすると回数は減るがパス率が1〜2pt落ちる）。
   wakiArm: 0.1,
+  selfRun: 0.4,      // 自分投げの連続への累進減点（3連続から。順番にパスが混ざる編成を好む）
 };
 
 /* 上の指標を実測する。ブラウザの採点・最適化ツール・点検ツールが同じ数値を見るよう1か所に置く */
@@ -143,8 +144,13 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   const throws = r.actions.filter(a => a.type === "throw");
   const passes = throws.filter(a => a.pass).length;
   const passRate = throws.length ? passes / throws.length : 0;
-  // パスの重みは5→8（2026-08-23 本人要望「演者間のパスをよしとする重み付けを」）
-  const passBonus = cfg.passMode === "off" ? 0 : passRate * 8;
+  // パス率の報酬は70%で頭打ち、80%超はむしろ抑える（2026-08-26 本人方針
+  // 「多くて良いが80%を超える必要はない。できれば70%くらいに抑えたい」）。
+  // 従来の一直線な報酬（rate×8）だと高いほど常に得で、90%台の編成が選ばれ続けた。
+  const PASS_SWEET = 0.70, PASS_HIGH = 0.80;
+  const passBonus = cfg.passMode === "off" ? 0
+    : Math.min(passRate, PASS_SWEET) * 8
+      - Math.max(0, passRate - PASS_HIGH) * 6;
   // パス率20%は本人が定めた下限（2026-08-25）。比例ボーナスだけだと、
   // 所作やリング数の小さな得と引き換えに下限を割る編成が選ばれうる。
   const passFloor = (cfg.passMode === "off" || !throws.length) ? 0
@@ -157,10 +163,33 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand" && !a.toParked).length;
   const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
   const fuss = handoffs * 0.5 + prepWaki * 0.4;
-  // 冒頭の一音は最も目を引くので、演者間の受け渡しで始めたい（2026-08-25 本人方針）。
-  // 成立や和音を覆さない程度の軽い重みにとどめる。
-  const firstCatch = r.actions.find(a => a.type === "catch" && a.noteIdx === 0);
-  const openMiss = (cfg.passMode === "off" || !firstCatch || firstCatch.pass) ? 0 : 0.6;
+  // 自分投げの連続を避ける（2026-08-26 本人方針「自分へのパスが3連続・4連続と増えるほど
+  // 避けたい。自分へのパスと他人へのパスがいい感じに順番にやってくるのが正しい」）。
+  // 曲の時間順に投げを並べ、演者間パスを1本も挟まない連続（run）の長さで累進的に減点。
+  // 2連続までは無料、3連続 0.8、4連続 2.4、5連続 4.8 …（(len-2)×(len-1)×0.4）。
+  const E0 = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
+  let selfRunCost = 0, maxSelfRun = 0;
+  if (cfg.passMode !== "off") {
+    const seq = throws.slice().sort((a, b) => a.t - b.t);
+    let run = 0;
+    const closeRun = () => {
+      if (run > maxSelfRun) maxSelfRun = run;
+      if (run >= 3) selfRunCost += (run - 2) * (run - 1) * (E0.selfRun != null ? E0.selfRun : 0.4);
+      run = 0;
+    };
+    for (const th of seq) { if (th.pass) closeRun(); else run++; }
+    closeRun();
+  }
+
+  // 冒頭は最も目を引くので、演者間の受け渡しで始めたい（2026-08-25 本人方針。
+  // 2026-08-26 拡張: 最初の2音とも。第九の冒頭ミ2音は交換で投げ合える、との本人指摘）。
+  let openMiss = 0;
+  if (cfg.passMode !== "off") {
+    for (const idx of [0, 1]) {
+      const c0 = r.actions.find(a => a.type === "catch" && a.noteIdx === idx);
+      if (c0 && !c0.pass) openMiss += 1.0;
+    }
+  }
   // 人間に無理がないか（2026-08-25 本人要望）。物理的な成立とは別の軸なので、
   // 破綻・振り・和音より弱く、パス率と competing する程度の重みに置く。
   const E = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
@@ -170,9 +199,10 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
     + em.armCatches * E.wakiArm;
   return {
     score: fails * 1000 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
-      + fuss + passFloor + openMiss + effort - passBonus,
+      + fuss + passFloor + openMiss + effort + selfRunCost - passBonus,
     fails, shakes, repShakes, chordMiss, passRate, rings: r.rings.length,
-    handoffs, prepWaki, openPass: !!(firstCatch && firstCatch.pass), effort, em,
+    handoffs, prepWaki, openPass: openMiss === 0, effort, em,
+    selfRunCost, maxSelfRun,
   };
 };
 
@@ -757,7 +787,15 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         for (const other of rings) {
           if (other.home !== q.id || other.id === ring.id) continue;
           const nt = nextNeed(other.midi, t - 0.01);
-          if (nt != null && nt - t < avoidWin) busySoon += avoidCost;
+          if (nt == null || nt - t >= avoidWin) continue;
+          // ★どの手で投げる予定かまで見る（2026-08-26）。従来は「受け手が近々何かを投げる」
+          // だけで一律に避けていたため、逆の手が完全に空いていてもパスを受けられなかった
+          // （実測: 第九の冒頭ミ2音の交換が6000シードで一度も成立しない）。
+          // その担当リングの投げに使う手が受け手候補の手と違うなら、衝突しないので数えない。
+          const th = other.loc === "hand" ? other.hand
+            : other.loc === "waki" ? (1 - ringWakiSide(q, other.id)) : null;
+          if (th != null && th !== c) continue;
+          busySoon += avoidCost;
         }
       }
       // 自分で投げて自分で受けるとき、どちらの手で受けるか。

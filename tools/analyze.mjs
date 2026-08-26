@@ -31,7 +31,7 @@ const EPS = 1e-6;
 function loadTorei() {
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-  for (const f of ["js/presets.js", "js/songs.js", "js/seeds.js", "js/scheduler.js"]) {
+  for (const f of ["js/presets.js", "js/songs.js", "js/seeds.js", "js/frozen.js", "js/scheduler.js"]) {
     const p = path.join(ROOT, f);
     vm.runInThisContext(fs.readFileSync(p, "utf8"), { filename: p });
   }
@@ -180,9 +180,12 @@ function classifySpot(spot, result, spb, TOREI, intervals) {
 function analyze(song, TOREI, seed) {
   const cfg = cfgFor(song);
   const melody = melodyFor(song);
-  const result = seed == null
-    ? TOREI.schedule(melody, cfg)
-    : TOREI._scheduleOnce(melody, cfg, seed);
+  // 完成曲は焼き付けた振付そのものを測る（seed再現ではない。2026-08-26）
+  const fz = seed == null && TOREI.FROZEN ? TOREI.FROZEN[song.id] : null;
+  const result = fz ? fz
+    : seed == null
+      ? TOREI.schedule(melody, cfg)
+      : TOREI._scheduleOnce(melody, cfg, seed);
   const spb = 60 / song.bpm;
 
   const throws = result.actions.filter(a => a.type === "throw");
