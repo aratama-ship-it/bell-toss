@@ -34,7 +34,7 @@ let totalViol = 0;
 const marginHist = {"<0.1":0,"0.1-0.2":0,"0.2-0.3":0,"0.3-0.5":0,">=0.5":0};
 const tooTight = [];
 for (const s of TOREI.SONGS) {
-  const cfg = {nPerformers:s.performers||3, flight:s.flight||1.2, wakiCap:1, maxDup:2,
+  const cfg = {nPerformers:s.performers||3, flight:s.flight||1.2, wakiCap:1, maxDup:2, maxRings: s.maxRings || null,
                allowShake:true, standTime:s.standTime||2.0, passMode:s.passMode||"more"};
   cfg.seed = (TOREI.SEEDS || {})[s.id];   // 配布される編成そのものを検査する
   const r = TOREI.schedule({bpm:s.bpm,beatsPerBar:s.beatsPerBar,notes:s.notes}, cfg);

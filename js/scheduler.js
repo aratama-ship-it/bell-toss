@@ -344,11 +344,16 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // 1本を投げ直すには キャッチ+投げ+滞空 が要る。標準の滞空で回らないなら複製する
       // （最短滞空で見積もると、実際には間に合わない箇所を取りこぼす）。
       const cycle = C.T_CATCH + C.T_THROW + cfg.flight;
-      let copies = 1;
+      // 詰まった連打（同じリングでは投げ直せない間隔）の組数も数える。
+      // リング上限で複製を絞るとき、どの音高に複製を回すかの優先度になる
+      // （2026-08-26: 第九で「連打1組のレ」が「連打3組のド」より先に複製を
+      // もらってしまう事故があった。総出現数ではなく連打の多さで配る）。
+      let tightPairs = 0;
       for (let i = 1; i < ts.length; i++) {
-        if (ts[i] - ts[i - 1] < cycle + 0.4) { copies = 2; break; }
+        if (ts[i] - ts[i - 1] < cycle + 0.4) tightPairs++;
       }
-      need.push({ midi, copies: Math.min(copies, cfg.maxDup), count: ts.length, first: ts[0] });
+      need.push({ midi, copies: Math.min(tightPairs > 0 ? 2 : 1, cfg.maxDup),
+        tightPairs, count: ts.length, first: ts[0] });
     }
     // 使用頻度の高い音から順に、手の空いている演者へ配る（1人 手2＋脇の本数まで）
     need.sort((a, b) => b.count - a.count || a.first - b.first);
@@ -374,7 +379,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       // 上限あり: 先に各音1本、残り枠に複製。こうしないと頻度上位の複製が
       // 頻度下位の1本目より先に枠を食い、「上限5なのに6本」が起きる。
       for (const item of need) alloc(item.midi);
-      outer: for (const item of need) {
+      // 複製は「詰まった連打の多い音高」から。上限で全部には行き渡らないため
+      const byTight = need.slice().sort((a, b) => b.tightPairs - a.tightPairs || b.count - a.count);
+      outer: for (const item of byTight) {
         for (let c = 1; c < item.copies; c++) {
           if (rings.length >= cfg.maxRings) break outer;
           if (!alloc(item.midi)) break outer;

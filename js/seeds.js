@@ -5,15 +5,15 @@
  * 楽譜を編集すると seed は捨てられ、その場の探索に切り替わる（js/main.js）。
  *
  * 再生成: node tools/optimize.mjs
- * 探索量: 3000シード
+ * 探索量: 4000シード
  */
 window.TOREI = window.TOREI || {};
 TOREI.SEEDS = {
-  "saints": 257,
+  "saints": 3249,
   "twinkle": 357,
-  "tulip": 531,
-  "mary": 417,
-  "ode": 92,
+  "tulip": 3747,
+  "mary": 3411,
+  "ode": 963,
   "hayate": 171,
   "yotsutsuji": 39,
   "mitsudomoe": 81,
@@ -21,17 +21,17 @@ TOREI.SEEDS = {
   "susanna": 1167,
   "hotaru": 129,
   "gomon": 477,
-  "yoimachi": 657,
+  "yoimachi": 3093,
   "korobeiniki": 1959,
-  "amazing": 321,
+  "amazing": 3243,
   "kiyoshi": 117,
   "etude2": 1398,
   "greensleeves": 1083,
-  "kasanesuzu": 316,
-  "sakura": 152,
+  "kasanesuzu": 3178,
+  "sakura": 3874,
   "furusato": 1144,
   "bunbun": 117,
-  "yuyake": 1617,
+  "yuyake": 3777,
   "furudokei": 149,
   "kaeru": 1509,
   "chocho": 1545,

@@ -45,6 +45,7 @@ function cfgFor(song) {
     flight: song.flight || 1.2,
     wakiCap: song.wakiCap ?? 1,
     maxDup: song.maxDup ?? 2,
+    maxRings: song.maxRings || null,
     allowShake: song.allowShake ?? true,
     standTime: song.standTime || 2.0,
     passMode: song.passMode || "more",

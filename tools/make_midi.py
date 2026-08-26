@@ -154,11 +154,11 @@ SONGS = [
         "id": "ode",
         "name": "よろこびの歌（第九）",
         "bpm": 72, "beatsPerBar": 4, "beatUnit": "quarter",
-        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.8, "maxDup": 1,
+        "performers": 3, "passMode": "more", "standTime": 2.0, "flight": 0.8, "maxDup": 2, "maxRings": 7,
         "desc": "ベートーヴェン(PD)。音高5つ。連打は原曲どおり。72BPM（クライアントの実施テンポ）。"
-                "連打の2音目はキャッチしたリングをその場で振って鳴らす（2026-08-26 本人承認の技法）。"
-                "これによりリング5本・3人で成立。maxDup=1（複製を許すと採点は10本・振り1回の案を選ぶが、"
-                "本人がリング5本・振り9回の案を選択）。",
+                "リング7本（ミ×2・ド×2。連打3組の音高に複製）・パス88%・連打振り4回。"
+                "本人指定: 7本まで許して同音2本を使うのが一番条件が良い（2026-08-26）。"
+                "上限7は maxRings で固定。残る連打（ソ・レ）は振りで鳴らす。",
         "notes": merge_repeats([
             (0,76,1),(1,76,1),(2,77,1),(3,79,1),(4,79,1),(5,77,1),(6,76,1),(7,74,1),
             (8,72,1),(9,72,1),(10,74,1),(11,76,1),(12,76,1.5),(13.5,74,0.5),(14,74,2),
@@ -807,6 +807,7 @@ def make_songs_js():
             f' beatsPerBar: {s["beatsPerBar"]}, performers: {s.get("performers", 4)},'
             f' passMode: "{s.get("passMode", "more")}", standTime: {s.get("standTime", 2.0)},'
             f' flight: {s.get("flight", 1.2)}, maxDup: {s.get("maxDup", 2)}, hidden: {hidden},'
+            + (f' maxRings: {s["maxRings"]},' if s.get("maxRings") else '')
         )
         lines.append(f"    notes: [{notes}] }},")
     lines += [
