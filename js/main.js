@@ -559,7 +559,7 @@
     const ph = $("playhead");
     ph.hidden = false;
     ph.style.height = (TOREI.nav.RULER_H + V.prHeight + 2 +
-      TOREI.timeline.height(state.cfg.nPerformers)) + "px";
+      TOREI.timeline.height(state.cfg.nPerformers, state.result)) + "px";
     ph.style.left = (V.x(state.pos / spb()) - 0.75) + "px";
   }
 

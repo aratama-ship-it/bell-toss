@@ -12,13 +12,40 @@ TOREI.timeline = (() => {
   const LANE_H = 20;                 // 1段の高さ
   const ROWS = ["左手", "右手", "左脇", "右脇"];  // 演者ごとの段（添字=手/脇の側）
   const BAND_H = LANE_H * ROWS.length;
-  const STAND_H = 22;                // 最下段のスタンド
+  // スタンドは1段固定ではなく「無制限の置き場」（2026-08-26 本人指摘）。
+  // 同時に載っている本数ぶんだけ段を増やす（どのスタンドかは区別しない）。
+  const STAND_LANE_H = 14;           // スタンドの1段
+  const STAND_PAD = 6;
 
-  function height(n) { return n * BAND_H + STAND_H; }
+  // スタンド上の同時滞在数から必要な段数を求め、各区間に段を割り当てる（貪欲な区間詰め）。
+  // 結果はキャッシュする: height() は再生ヘッドの更新などで毎フレーム呼ばれるため
+  let standCache = { key: null, lanes: 1, assign: null };
+  function standLayout(result) {
+    if (!result) return { lanes: 1, assign: new Map() };
+    if (standCache.key === result) return standCache;
+    const minT = result.minT;
+    const spans = buildSpans(result)
+      .filter(sp => sp.kind === "stand" && sp.to > minT + 1e-6)
+      .sort((a, b) => Math.max(a.from, minT) - Math.max(b.from, minT));
+    const laneEnd = [];
+    const assign = new Map();  // span -> lane
+    for (const sp of spans) {
+      const from = Math.max(sp.from, minT);
+      let lane = laneEnd.findIndex(e => e <= from + 1e-6);
+      if (lane < 0) { lane = laneEnd.length; laneEnd.push(0); }
+      laneEnd[lane] = sp.to;
+      assign.set(sp.ring + ":" + sp.from, lane);
+    }
+    standCache = { key: result, lanes: Math.max(1, laneEnd.length), assign };
+    return standCache;
+  }
+  function standH(result) { return standLayout(result).lanes * STAND_LANE_H + STAND_PAD; }
+
+  function height(n, result) { return n * BAND_H + standH(result); }
 
   // 段の中心Y。row: 0=左手 1=右手 2=左脇 3=右脇
   function rowY(perf, row) { return perf * BAND_H + row * LANE_H + LANE_H / 2; }
-  function standY(n) { return n * BAND_H + STAND_H / 2; }
+  function standY(n, lane) { return n * BAND_H + STAND_PAD / 2 + (lane || 0) * STAND_LANE_H + STAND_LANE_H / 2; }
 
   // 和音のキャッチ点は同じ(演者,手,時刻)に2つ乗るので上下にずらす（drawとlayoutActionで共有）
   function catchLaneY(a) {
@@ -92,24 +119,28 @@ TOREI.timeline = (() => {
   function draw(state) {
     const canvas = document.getElementById("timeline");
     const n = state.cfg.nPerformers;
-    const ctx = TOREI.pianoroll.setupCanvas(canvas, V.width, height(n));
+    const H = height(n, state.result);
+    const ctx = TOREI.pianoroll.setupCanvas(canvas, V.width, H);
+    // スタンドの段数が変わったら gutter のラベル高さも合わせる（buildGutterは曲切替時しか走らない）
+    const sl = document.querySelector("#tl-gutter .stand-label");
+    if (sl) sl.style.height = standH(state.result) + "px";
     const spb = 60 / state.melody.bpm;
     const toX = (tSec) => V.x(tSec / spb);
 
     ctx.fillStyle = "#f8f5ee";
-    ctx.fillRect(0, 0, V.width, height(n));
+    ctx.fillRect(0, 0, V.width, H);
     // 脇の段は少し沈んだ地色にして手の段と見分ける
     for (let p = 0; p < n; p++) {
       ctx.fillStyle = "rgba(44,49,58,0.03)";
       ctx.fillRect(0, p * BAND_H + 2 * LANE_H, V.width, 2 * LANE_H);
     }
     ctx.fillStyle = "rgba(169,130,47,0.05)";
-    ctx.fillRect(0, n * BAND_H, V.width, STAND_H);
+    ctx.fillRect(0, n * BAND_H, V.width, H - n * BAND_H);
 
     // 準備ゾーン
     if (V.preBeats > 0) {
       ctx.fillStyle = "rgba(169,130,47,0.06)";
-      ctx.fillRect(0, 0, V.preBeats * V.PPB, height(n));
+      ctx.fillRect(0, 0, V.preBeats * V.PPB, H);
     }
 
     // 小節線
@@ -119,7 +150,7 @@ TOREI.timeline = (() => {
       ctx.strokeStyle = b % bpb === 0 ? "rgba(44,49,58,0.16)" : "rgba(44,49,58,0.05)";
       ctx.beginPath();
       ctx.moveTo(x + 0.5, 0);
-      ctx.lineTo(x + 0.5, height(n));
+      ctx.lineTo(x + 0.5, H);
       ctx.stroke();
     }
 
@@ -154,10 +185,10 @@ TOREI.timeline = (() => {
       const from = Math.max(sp.from, minT);
       if (sp.to <= from + 1e-6) continue;
       const x1 = toX(from), x2 = toX(sp.to);
-      const y = sp.kind === "stand" ? standY(n)
+      const y = sp.kind === "stand"
+        ? standY(n, standLayout(state.result).assign.get(sp.ring + ":" + sp.from) || 0)
         : rowY(sp.perf, sp.row);
-      // スタンドは同時に多数乗るので、リングごとに少し上下へ散らす
-      const yo = sp.kind === "stand" ? ((sp.ring % 3) - 1) * 5 : 0;
+      const yo = 0;
       const color = TOREI.pitchColor(ring.midi, 0.9);
       ctx.fillStyle = TOREI.pitchColor(ring.midi, sp.kind === "hand" ? 0.30 : 0.16);
       ctx.strokeStyle = TOREI.pitchColor(ring.midi, sp.kind === "hand" ? 0.75 : 0.4);
@@ -252,13 +283,13 @@ TOREI.timeline = (() => {
         const x1 = toX(a.t), x2 = toX(a.t + a.dur);
         let yFrom, yTo;
         if (a.type === "pickup") {
-          yFrom = a.from === "waki" ? rowY(a.perf, 2 + (1 - a.hand)) : standY(n);
+          yFrom = a.from === "waki" ? rowY(a.perf, 2 + (1 - a.hand)) : standY(n, 0);
           yTo = rowY(a.perf, a.hand);
         } else {
           yFrom = rowY(a.perf, a.hand);
           yTo = a.to === "waki" ? rowY(a.perf, 2 + (1 - a.hand))
             : a.to === "otherhand" ? rowY(a.perf, 1 - a.hand)
-            : standY(n);
+            : standY(n, 0);
         }
         ctx.strokeStyle = TOREI.pitchColor(rings[a.ring].midi, 0.55);
         ctx.lineWidth = 2;
@@ -302,7 +333,7 @@ TOREI.timeline = (() => {
     }
     const stand = document.createElement("div");
     stand.className = "stand-label";
-    stand.style.height = STAND_H + "px";
+    stand.style.height = standH(state.result) + "px";
     stand.textContent = "スタンド";
     gutter.appendChild(stand);
   }
@@ -322,5 +353,5 @@ TOREI.timeline = (() => {
     return best;
   }
 
-  return { draw, buildGutter, BAND_H, LANE_H, STAND_H, height, layoutAction, throwAt };
+  return { draw, buildGutter, BAND_H, LANE_H, height, layoutAction, throwAt };
 })();
