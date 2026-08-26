@@ -116,100 +116,237 @@
     renderSummary();
     renderStartLayout();
     renderEffort();
+    if (refreshEditStrip) refreshEditStrip();
     renderWarnings();
     buildCueSheet();
     if (soloOpen) $("solo-title").textContent = `${TOREI.perfName(soloPerf)} の動き`;
   }
 
-  /* ダイヤグラム（行動表）上で人間が組み直す（2026-08-26 本人要望）。
-     投げの白抜き丸をクリック→受け手（演者・手）と高さを指定。指定は音符の fix として持ち、
-     スケジューラーが計画時の制約として尊重する。指定どおりに投げられない場合は
-     自動割り当てで鳴らし、警告に出す（破綻で止めない）。
-     編集すると署名が変わり、焼き付け・確定seedは自動的に外れる（完成曲を守る仕組みと同居）。 */
-  let fixNoteIdx = null;
+  /* 組み直しの編集卓（2026-08-26 全面改訂。Codexと意見交換して設計）。
+     ダイヤグラムの投げをクリック→選択→下の常設ストリップで受け手・手・高さを指定。
+     指定は音符の fix として持ち、スケジューラーが計画時の制約として尊重する。
+     設計の要点（Codexの指摘を採用）:
+     - 「おまかせ」には実際の解決結果を併記する（未指定と最適値の区別がつかないため）
+     - 即時適用＋1段の元に戻す。適用ボタンは「押したか」という余計な状態を増やすだけ
+     - 1投の変更が後続に波及した数を報告し、変わった投げを数秒光らせる（信頼のため）
+     - 破綻は止めずに警告（既存方針）。ストリップに自然文で出し、クリックで該当箇所へ */
+  let selNote = null;          // 選択中の noteIdx
+  let fixUndo = null;          // 直前の全fixスナップショット（1段）
+  function snapshotFixes() {
+    return JSON.stringify(state.melody.notes.map(n => n.fix || null));
+  }
+  function restoreFixes(snap) {
+    const arr = JSON.parse(snap);
+    state.melody.notes.forEach((n, i) => { n.fix = arr[i] || null; });
+  }
+  function throwOf(noteIdx) {
+    return state.result && state.result.actions.find(a => a.type === "throw" && a.noteIdx === noteIdx);
+  }
+  // 波及の検出用: 各投げの「見た目」を1文字列に
+  function throwKeys() {
+    const m = {};
+    if (!state.result) return m;
+    for (const a of state.result.actions) {
+      if (a.type !== "throw" || a.noteIdx == null) continue;
+      m[a.noteIdx] = [a.perf, a.hand, a.catchPerf, a.catchHand, Math.round(a.flight * 100)].join(",");
+    }
+    return m;
+  }
+
   function setupFixEditor() {
     const canvas = $("timeline");
-    const pop = $("fix-pop");
 
-    const openPop = (a, ev) => {
-      fixNoteIdx = a.noteIdx;
-      const note = state.melody.notes[a.noteIdx];
-      const fix = note.fix || {};
-      // 受け手の選択肢は人数に合わせて作り直す
-      const sel = $("fp-catch");
-      sel.innerHTML = '<option value="">自動</option>';
-      for (let p = 0; p < state.cfg.nPerformers; p++) {
-        for (const h of [0, 1]) {
-          const o = document.createElement("option");
-          o.value = p + ":" + h;
-          o.textContent = `${TOREI.perfName(p)} の${["左手", "右手"][h]}`;
-          sel.appendChild(o);
-        }
-        const o2 = document.createElement("option");
-        o2.value = p + ":";
-        o2.textContent = `${TOREI.perfName(p)}（手は自動）`;
-        sel.appendChild(o2);
+    const seg = (host, items, current, onPick) => {
+      host.innerHTML = "";
+      for (const it of items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.innerHTML = it.label;
+        if (it.value === current) b.classList.add("on", it.value === "" ? "auto" : "x");
+        b.addEventListener("click", () => onPick(it.value));
+        host.appendChild(b);
       }
-      sel.value = fix.catchPerf != null
-        ? fix.catchPerf + ":" + (fix.catchHand != null ? fix.catchHand : "") : "";
-      $("fp-level").value = fix.level || "";
-      $("fp-title").textContent =
-        `${TOREI.noteName(note.midi)}（${TOREI.perfName(a.perf)}が投げる音）の編集`;
-      // クリック位置の近くに出す（scroll-area基準の絶対配置）
-      const area = canvas.parentElement;
-      const ar = area.getBoundingClientRect();
-      pop.hidden = false;
-      pop.style.left = Math.min(ev.clientX - ar.left + area.scrollLeft + 12,
-        area.scrollWidth - pop.offsetWidth - 8) + "px";
-      pop.style.top = (canvas.offsetTop + 8) + "px";
     };
-    const closePop = () => { pop.hidden = true; fixNoteIdx = null; };
+
+    const renderStrip = () => {
+      const empty = $("es-empty"), body = $("es-body");
+      const th = selNote != null ? throwOf(selNote) : null;
+      if (selNote == null || !th) {
+        empty.hidden = false; body.hidden = true;
+        TOREI.timeline.setSelection(null);
+        drawTimelineOnly();
+        return;
+      }
+      empty.hidden = true; body.hidden = false;
+      const note = state.melody.notes[selNote];
+      const fix = note.fix || {};
+      const spB = spb();
+      const beat = note.beat, bpb = state.melody.beatsPerBar || 4;
+      $("es-note").textContent =
+        `${Math.floor(beat / bpb) + 1}小節${Math.floor(beat % bpb) + 1}拍 「${TOREI.noteName(note.midi)}」`;
+      // 実際の解決結果を自然文で（おまかせでも今どうなっているかが分かる）
+      const H = ["左手", "右手"];
+      $("es-route").innerHTML =
+        `${TOREI.perfName(th.perf)}の${H[th.hand]}から → <b>${TOREI.perfName(th.catchPerf)}の${H[th.catchHand]}</b>へ`
+        + `（高さ${TOREI.throwLevel(th.flight)}・滞空${th.flight.toFixed(2)}秒）`;
+
+      const perfItems = [{ value: "", label: `おまかせ<small>今: ${TOREI.perfName(th.catchPerf)}</small>` }];
+      for (let p = 0; p < state.cfg.nPerformers; p++) perfItems.push({ value: String(p), label: TOREI.perfName(p) });
+      seg($("es-perf"), perfItems, fix.catchPerf != null ? String(fix.catchPerf) : "",
+        (v) => applyFix({ catchPerf: v === "" ? null : +v }));
+
+      seg($("es-hand"), [
+        { value: "", label: `おまかせ<small>今: ${H[th.catchHand]}</small>` },
+        { value: "0", label: "左" }, { value: "1", label: "右" },
+      ], fix.catchHand != null ? String(fix.catchHand) : "",
+        (v) => applyFix({ catchHand: v === "" ? null : +v }));
+
+      const lvItems = [{ value: "", label: `おまかせ<small>今: ${TOREI.throwLevel(th.flight)}</small>` }];
+      for (let l = 1; l <= 5; l++) lvItems.push({ value: String(l),
+        label: l === 1 ? "1<small>低い</small>" : l === 5 ? "5<small>高い</small>" : String(l) });
+      seg($("es-level"), lvItems, fix.level ? String(fix.level) : "",
+        (v) => applyFix({ level: v === "" ? null : +v }));
+
+      $("es-undo").disabled = !fixUndo;
+      TOREI.timeline.setSelection(selNote);
+      drawTimelineOnly();
+    };
+
+    const setStatus = (html) => { $("es-status").innerHTML = html || ""; };
+
+    // 部分更新（catchPerf / catchHand / level のどれか1つ）→ 即時適用
+    const applyFix = (patch) => {
+      if (selNote == null) return;
+      const note = state.melody.notes[selNote];
+      fixUndo = snapshotFixes();
+      const fix = Object.assign({}, note.fix || {});
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null) delete fix[k]; else fix[k] = v;
+      }
+      note.fix = Object.keys(fix).length ? fix : null;
+
+      const before = throwKeys();
+      recompute();
+      updateClearFixesBtn();
+      // 波及: 編集した音以外で見た目が変わった投げ
+      const after = throwKeys();
+      const changed = [];
+      for (const [idx, key] of Object.entries(after)) {
+        if (+idx !== selNote && before[idx] !== key) changed.push(+idx);
+      }
+      TOREI.timeline.setFlash(changed);
+      drawTimelineOnly();
+      if (TOREI.timeline.clearFlashLater) TOREI.timeline.clearFlashLater(() => drawTimelineOnly());
+
+      // 状態の報告（自然文・破綻はクリックで該当箇所へ）
+      const warn = (state.result.warnings || []).find(w => w.noteIdx === selNote);
+      if (warn) {
+        setStatus(`<span class="warn" id="es-warn-jump">指定どおりにできません: ${warn.msg.replace(/^[0-9:.]+ の /, "")}</span>`);
+        const el = document.getElementById("es-warn-jump");
+        if (el) el.addEventListener("click", () => jumpToWarning(warn));
+      } else if (changed.length) {
+        setStatus(`<span class="ok">変更しました。</span>つられて後続 ${changed.length} 投の割り当ても変わりました（光っている投げ）`);
+      } else {
+        setStatus(`<span class="ok">変更しました。</span>他の投げはそのままです`);
+      }
+      renderStrip();
+    };
+
+    // 選択の移動（←→: 時間順の前後の投げへ）
+    const moveSel = (dir) => {
+      if (!state.result) return;
+      const th = state.result.actions.filter(a => a.type === "throw" && a.noteIdx != null)
+        .sort((a, b) => a.t - b.t);
+      if (!th.length) return;
+      let i = th.findIndex(a => a.noteIdx === selNote);
+      i = i < 0 ? (dir > 0 ? 0 : th.length - 1) : Math.max(0, Math.min(th.length - 1, i + dir));
+      selectNote(th[i].noteIdx, true);
+    };
+
+    const selectNote = (noteIdx, scroll) => {
+      // 和音の音は編集対象外（キャッチの手が和音の成立条件そのものなので）
+      const cnt = state.melody.notes.filter(n =>
+        Math.abs(n.beat - state.melody.notes[noteIdx].beat) < 1e-6).length;
+      if (cnt >= 2) { showNotice("和音の音は編集できません（キャッチの手が和音の成立条件のため）"); return; }
+      selNote = noteIdx;
+      setStatus("");
+      renderStrip();
+      if (scroll) {
+        const a = throwOf(noteIdx);
+        if (a) {
+          const area = canvas.parentElement;
+          const x = V.x(a.t / spb());
+          if (x < area.scrollLeft + 40 || x > area.scrollLeft + area.clientWidth - 40) {
+            area.scrollLeft = Math.max(0, x - area.clientWidth / 2);
+          }
+        }
+      }
+    };
+    const deselect = () => { selNote = null; setStatus(""); renderStrip(); };
 
     canvas.addEventListener("click", (ev) => {
       const r = canvas.getBoundingClientRect();
       const a = TOREI.timeline.throwAt(state, ev.clientX - r.left, ev.clientY - r.top);
-      if (!a) { closePop(); return; }
-      // 和音の音は編集対象外（キャッチの手が和音の成立条件そのものなので）
-      const cnt = state.melody.notes.filter(n => Math.abs(n.beat - state.melody.notes[a.noteIdx].beat) < 1e-6).length;
-      if (cnt >= 2) { showNotice("和音の音は編集できません（キャッチの手が和音の成立条件のため）"); return; }
-      openPop(a, ev);
+      if (!a) { deselect(); return; }
+      selectNote(a.noteIdx, false);
     });
     canvas.addEventListener("mousemove", (ev) => {
       const r = canvas.getBoundingClientRect();
       canvas.style.cursor = TOREI.timeline.throwAt(state, ev.clientX - r.left, ev.clientY - r.top) ? "pointer" : "";
     });
 
-    $("fp-apply").addEventListener("click", () => {
-      if (fixNoteIdx == null) return;
-      const note = state.melody.notes[fixNoteIdx];
-      const v = $("fp-catch").value;
-      const lv = +$("fp-level").value || null;
-      const fix = {};
-      if (v) {
-        const [p, h] = v.split(":");
-        fix.catchPerf = +p;
-        if (h !== "") fix.catchHand = +h;
-      }
-      if (lv) fix.level = lv;
-      note.fix = (fix.catchPerf != null || fix.level) ? fix : null;
-      closePop();
+    // キーボード（DAW流: 選択中だけ有効。数字=高さ・0=おまかせ・←→=前後・Esc=解除）
+    document.addEventListener("keydown", (ev) => {
+      if (selNote == null) return;
+      const tag = ev.target.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (ev.key === "Escape") { deselect(); }
+      else if (ev.key === "ArrowLeft" && !ev.shiftKey) { ev.preventDefault(); ev.stopImmediatePropagation(); moveSel(-1); }
+      else if (ev.key === "ArrowRight" && !ev.shiftKey) { ev.preventDefault(); ev.stopImmediatePropagation(); moveSel(1); }
+      else if (/^[1-5]$/.test(ev.key)) { applyFix({ level: +ev.key }); }
+      else if (ev.key === "0") { applyFix({ level: null }); }
+    }, true);
+
+    $("es-play").addEventListener("click", () => {
+      const a = selNote != null ? throwOf(selNote) : null;
+      if (!a) return;
+      // その場面だけ再生: 投げの0.8秒前から、キャッチの1秒後まで
+      stopPlayback();
+      state.pos = a.t - 0.8;
+      startPlayback();
+      const stopAt = a.t + a.flight + 1.0;
+      setTimeout(() => { if (playing) stopPlayback(); }, (stopAt - state.pos) * 1000 / 1);
+    });
+    $("es-auto").addEventListener("click", () => {
+      if (selNote == null) return;
+      applyFix({ catchPerf: null, catchHand: null, level: null });
+    });
+    $("es-undo").addEventListener("click", () => {
+      if (!fixUndo) return;
+      restoreFixes(fixUndo);
+      fixUndo = null;
       recompute();
       updateClearFixesBtn();
+      setStatus('<span class="ok">元に戻しました</span>');
+      renderStrip();
     });
-    $("fp-clear").addEventListener("click", () => {
-      if (fixNoteIdx == null) return;
-      state.melody.notes[fixNoteIdx].fix = null;
-      closePop();
-      recompute();
-      updateClearFixesBtn();
-    });
-    $("fp-close").addEventListener("click", closePop);
 
     $("btn-clear-fixes").addEventListener("click", () => {
+      fixUndo = snapshotFixes();
       for (const n of state.melody.notes) n.fix = null;
       recompute();
       updateClearFixesBtn();
+      renderStrip();
     });
+
+    // recompute後にストリップを追随させるための公開
+    refreshEditStrip = renderStrip;
+  }
+  let refreshEditStrip = null;
+  // 再計算せず行動表と楽譜だけ描き直す（選択の強調用）
+  function drawTimelineOnly() {
+    if (!state.result) return;
+    TOREI.timeline.draw(state);
   }
   function updateClearFixesBtn() {
     const btn = $("btn-clear-fixes");
@@ -274,6 +411,7 @@
     renderSummary();
     renderStartLayout();
     renderEffort();
+    if (refreshEditStrip) refreshEditStrip();
     renderWarnings();
     buildHighlightEls();
     buildCueSheet();

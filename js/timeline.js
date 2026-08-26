@@ -215,12 +215,23 @@ TOREI.timeline = (() => {
         const y1 = rowY(a.perf, a.hand);
         const y2 = rowY(a.catchPerf != null ? a.catchPerf : a.perf,
           a.catchHand != null ? a.catchHand : a.hand);
+        const isSel = a.noteIdx != null && a.noteIdx === selNoteIdx;
+        const isFlash = a.noteIdx != null && flashSet.has(a.noteIdx);
+        const arc = () => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo((x1 + x2) / 2, Math.min(y1, y2) - 14 - a.flight * 4, x2, y2);
+          ctx.stroke();
+        };
+        if (isSel || isFlash) {
+          // 外側の光（選択=金、波及=薄い墨）。太さでも区別する
+          ctx.strokeStyle = isSel ? "rgba(169,130,47,0.35)" : "rgba(44,49,58,0.22)";
+          ctx.lineWidth = isSel ? 9 : 7;
+          arc();
+        }
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.quadraticCurveTo((x1 + x2) / 2, Math.min(y1, y2) - 14 - a.flight * 4, x2, y2);
-        ctx.stroke();
+        ctx.lineWidth = isSel ? 3.2 : 1.8;
+        arc();
         // 人間が編集した音（fix）は金の四角で囲む
         const fx = a.noteIdx != null && state.melody.notes[a.noteIdx]
           ? state.melody.notes[a.noteIdx].fix : null;
@@ -229,12 +240,12 @@ TOREI.timeline = (() => {
           ctx.lineWidth = 1.4;
           ctx.strokeRect(x1 - 7, y1 - 7, 14, 14);
         }
-        // 投げ点（白抜き丸）
+        // 投げ点（白抜き丸）。選択中は大きく
         ctx.fillStyle = "#f8f5ee";
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.6;
+        ctx.lineWidth = isSel ? 2.4 : 1.6;
         ctx.beginPath();
-        ctx.arc(x1, y1, 3.6, 0, Math.PI * 2);
+        ctx.arc(x1, y1, isSel ? 5.5 : 3.6, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
       }
 
@@ -353,5 +364,20 @@ TOREI.timeline = (() => {
     return best;
   }
 
-  return { draw, buildGutter, BAND_H, LANE_H, height, layoutAction, throwAt };
+  /* 編集卓の選択と、波及した投げの一時フラッシュ（2026-08-26）。
+     選択は金一色に頼らず「太い弧＋外側の光」で形でも分かるようにする（Codex指摘）。
+     周囲は減光しない: 受け手を選ぶには前後の状況が見えている必要がある */
+  let selNoteIdx = null;
+  let flashSet = new Set();
+  let flashTimer = 0;
+  function setSelection(noteIdx) { selNoteIdx = noteIdx; }
+  function setFlash(noteIdxs) { flashSet = new Set(noteIdxs || []); }
+  function clearFlashLater(redraw) {
+    clearTimeout(flashTimer);
+    if (!flashSet.size) return;
+    flashTimer = setTimeout(() => { flashSet = new Set(); redraw(); }, 2600);
+  }
+
+  return { draw, buildGutter, BAND_H, LANE_H, height, layoutAction, throwAt,
+    setSelection, setFlash, clearFlashLater };
 })();

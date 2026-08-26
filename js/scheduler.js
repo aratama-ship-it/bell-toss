@@ -797,7 +797,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
         ? (fix.catchHand != null
             ? [[perfs[fix.catchPerf], fix.catchHand]]
             : [[perfs[fix.catchPerf], 0], [perfs[fix.catchPerf], 1]])
-        : perfs.flatMap(q => [[q, 0], [q, 1]]);
+        : (fix && fix.catchHand != null)
+          // 手だけの指定（受ける人はおまかせ）: 全演者のその手が候補（2026-08-26 編集卓）
+          ? perfs.map(q => [q, fix.catchHand])
+          : perfs.flatMap(q => [[q, 0], [q, 1]]);
     for (const [q, c] of catchTargets) {
       const isSelf = q.id === perf.id;
       if (!isSelf && passCost === Infinity) continue;

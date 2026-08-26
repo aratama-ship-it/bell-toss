@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=21">
+<link rel="stylesheet" href="css/style.css?v=22">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-14</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-15</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -172,29 +172,44 @@
         <canvas id="pianoroll"></canvas>
         <canvas id="timeline"></canvas>
         <div id="playhead" hidden></div>
-        <div id="fix-pop" hidden>
-          <div class="fp-title" id="fp-title"></div>
-          <label>受け手
-            <select id="fp-catch"></select></label>
-          <label>高さ
-            <select id="fp-level">
-              <option value="">自動</option>
-              <option value="1">1（低い）</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5（高い）</option>
-            </select></label>
-          <div class="fp-btns">
-            <button type="button" id="fp-apply" class="primary">適用</button>
-            <button type="button" id="fp-clear">この指定を外す</button>
-            <button type="button" id="fp-close">閉じる</button>
-          </div>
-        </div>
       </div>
     </div>
+    <!-- 組み直しの編集卓（DAWのインスペクタ風・常設。2026-08-26 本人方針
+         「この編集画面こそがクライアントが一番使うもの」）。浮きポップオーバーは廃止 -->
+    <section id="edit-strip" aria-label="投げの編集">
+      <div class="es-empty" id="es-empty">
+        ダイヤグラムの<b>投げ（白抜きの丸）をクリック</b>して選ぶと、ここで組み直せます。
+        <span class="es-keys">←→で前後の投げへ ／ 1〜5で高さ ／ 0でおまかせ ／ Escで解除</span>
+      </div>
+      <div class="es-body" id="es-body" hidden>
+        <div class="es-id">
+          <div class="es-note" id="es-note"></div>
+          <div class="es-route" id="es-route"></div>
+        </div>
+        <div class="es-groups">
+          <div class="es-group">
+            <div class="es-label">受ける人</div>
+            <div class="es-seg" id="es-perf"></div>
+          </div>
+          <div class="es-group">
+            <div class="es-label">受ける手</div>
+            <div class="es-seg" id="es-hand"></div>
+          </div>
+          <div class="es-group">
+            <div class="es-label">投げの高さ</div>
+            <div class="es-seg" id="es-level"></div>
+          </div>
+        </div>
+        <div class="es-actions">
+          <button type="button" id="es-play">▶ この場面を再生</button>
+          <button type="button" id="es-auto">おまかせに戻す</button>
+          <button type="button" id="es-undo" disabled>元に戻す</button>
+        </div>
+        <div class="es-status" id="es-status"></div>
+      </div>
+    </section>
     <p class="hint">楽譜は<b>クリックで追加・ドラッグで移動・その場でクリックすると削除</b>。
-      行動表の<b>投げ（白抜き丸）をクリックすると受け手と高さを編集</b>できます（✎印＝編集済み）。
+      行動表の<b>投げ（白抜き丸）をクリックすると下の編集卓で組み直せます</b>（金の四角＝編集済み）。
       <button type="button" id="btn-clear-fixes" hidden>✎ 編集をすべて解除</button><br>
       下の段は自動計算された各演者の行動（音符から左へ伸びる線が「投げてから鳴るまで」の滞空）。<br>
       小節番号の帯を<b>なぞると再生位置</b>、<b>option+ドラッグでループ範囲</b>。上の見取り図は<b>窓をつかんで移動・端を引いてズーム</b>。
@@ -243,13 +258,13 @@
 <script src="js/songs.js?v=31"></script>
   <script src="js/seeds.js?v=10"></script>
   <script src="js/frozen.js?v=1"></script>
-<script src="js/scheduler.js?v=24"></script>
+<script src="js/scheduler.js?v=25"></script>
 <script src="js/audio.js"></script>
 <script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
-<script src="js/timeline.js?v=4"></script>
+<script src="js/timeline.js?v=5"></script>
 <script src="js/stage.js?v=11"></script>
-<script src="js/main.js?v=38"></script>
+<script src="js/main.js?v=39"></script>
 </body>
 </html>
