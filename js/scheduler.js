@@ -1310,7 +1310,12 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     }
   }
 
-  const minT = actions.length ? Math.min(0, actions[0].t) : 0;
+  // 再生・表示の開始点は「開演前の儀式」を除いた最初の動作（2026-08-26 本人指示
+  // 「準備が長すぎる。最初の人が投げ始めた瞬間くらいからスタートで」）。
+  // スタンドからの取り出し（prep:true）は開演前に済んでいる体で、タイムラインに出さない。
+  // 行動自体は残す（Qシートの「準備」行と、開始時の持ち方の導出に使う）。
+  const live = actions.filter(a => !a.prep);
+  const minT = live.length ? Math.min(0, live[0].t) : 0;
 
   // リングのラベル（同音が複数あるとき ド①ド② と区別）
   const perPitch = {};

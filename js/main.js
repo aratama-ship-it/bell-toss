@@ -271,7 +271,9 @@
     // いまの再生位置に最も近い動作から始める（Qシートで見ていた場所を引き継ぐ）
     soloIdx = 0;
     for (let i = 0; i < soloRows.length; i++) if (soloRows[i].t <= state.pos + 1e-6) soloIdx = i;
-    soloSeek(soloRows[soloIdx].t);
+    // 開始点は最初の投げの直前まで（準備の取り出しは開演前に済んでいる体。2026-08-26）。
+    // 「準備」行へは前後ボタンで明示的に戻れる
+    soloSeek(Math.max(soloRows[soloIdx].t, state.result.minT - 0.4));
     $("solo-close").focus();
   }
 
@@ -707,7 +709,8 @@
       const a = state.loop.a * spb(), b = state.loop.b * spb();
       return (state.pos < a - 1e-3 || state.pos >= b - 1e-3) ? a : state.pos;
     }
-    // カーソルが曲頭・曲末にあるときは準備の動きから見せる
+    // カーソルが曲頭・曲末にあるときは最初の投げの直前から見せる
+    // （スタンド取り出しの儀式は見せない。2026-08-26 本人指示）
     const prepStart = Math.max(-4, Math.min(0, state.result.minT)) - 0.4;
     if (Math.abs(state.pos) <= 1e-3 || state.pos >= songEndT() - 0.01) return prepStart;
     return state.pos;
