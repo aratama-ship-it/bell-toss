@@ -2334,3 +2334,34 @@ bunbunのbpmを61に変えて読み込むと、バッジが「完成版」→「
 エラースタイルも正しく設定されていた）。テスト後は元のbpm・songs.jsに復元。
 
 検証: 全34曲 verify.mjs 通過。bunbunの焼き付けは今回もハッシュ完全一致で無傷。
+
+## 2026-09-04 スケジューラーの巨大関数を分割（レビュー#5・第1段） v2026.9.4-3
+
+**先に安全網を作った: tools/golden.mjs。** verify.mjs の完成曲ハッシュは js/frozen.js の
+保存済みデータを見るだけで `_scheduleOnce` を再実行しないため、「振る舞いを変えないはずの
+整理」で振る舞いが変わっても検出できなかった。golden.mjs は全34曲 × seed 0〜11＋配布用の
+確定seed ＋ 人間の編集（fix: 高さ指定／受ける人／受ける手／ロック）を含む合成ケース、
+計475件で `_scheduleOnce` を実行し、結果オブジェクト全体のハッシュを tools/golden.json に
+記録・照合する（0.7秒）。感度も確認: planToss内の 0.2→0.21 の変更で 164/475件が落ちる。
+fixケースは33/34曲で出力が変わり、fixDrops 合計47＝緩和経路まで通る。verify.mjs の
+5項目目に組み込んだ。★振る舞いを意図して変えたら `node tools/golden.mjs --record`。
+同時に seeds.js も古くなるので optimize.mjs の再実行を検討する（frozen.js は無関係）。
+
+**planToss（274行）を4段に分割:** ①planAcquisition（どこから・どの手で取るか）
+②findTossRoute（滞空候補×取得時期の窓探索。tryWindow を内包）③chooseCatch（受け手の選定）
+④tossCost（費用）。planToss 本体は34行の組み立てだけになった。いずれも _scheduleOnce の
+状態（perfs/rings/airborne/cfg）をクロージャで参照する形のまま。
+加えて scheduleNoteIndependently から fix の段階的緩和を relaxFix に、_scheduleOnce 末尾の
+無名ブロック（脇往復の除去）を pruneWakiRoundTrips に、リングのラベル付けを labelRings に
+切り出した。**golden 475件すべて一致**＝振る舞いは1ビットも変わっていない。
+
+**分割で気づいた既存の挙動（今回は触らない）:** 高さ指定（fix.level）で滞空候補を絞るのは
+直前取得(a)の経路だけで、早取り保持(b)と補充(c)は絞っていない fCands をそのまま使う。
+高さ指定が(b)(c)経由の投げに効かないことがありうる。仕様として温存し、コメントに明記した。
+また planToss は乱数を消費しないので分割で乱数列はずれないが、scheduleNoteIndependently は
+候補ごとに rnd() を呼ぶため候補の順序を動かせない（コメントに明記）。
+
+**未着手（第2段）:** 状態をオブジェクトに束ねて各関数が受け取る形（単体テスト可能に）。
+golden.mjs が結合レベルの回帰検査として機能するので、第2段の必要性は下がった。
+
+ブラウザ確認: bunbun 完成版82%・編集で76%（波及26投）・undoで完成版に復帰。verify 5項目通過。

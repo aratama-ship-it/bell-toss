@@ -638,27 +638,27 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     return storable ? { kind: "storable", poss: storable } : { kind: "none" };
   }
 
-  /* --- 1候補の計画 ---
+  /* --- 1候補の計画（planToss）---
      ring を perf の hand(handIdx) が投げ、キャッチ時刻 t で鳴らす。
      forceCatch指定時（保持キャッチ和音用）: キャッチ手を{perf,hand,chordRing}に固定し、
-     その手が chordRing を静かに持ったままでも「和音」としてキャッチを許可する。 */
-  function planToss(ring, perf, handIdx, t, isNew, forceCatch, fix) {
-    if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
-    if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
+     その手が chordRing を静かに持ったままでも「和音」としてキャッチを許可する。
 
-    const hand = perf.hands[handIdx];
-    let acqDur = 0, acqFrom = null;
-    // ★脇から取るのは「挟んだ手＝脇の反対側の手」が基本（2026-08-26 本人談:
-    //   左手のリングは右脇に挟み、取るときも左手）。右脇のリングを右手で抜くのは無理のある動き。
-    //   ただし完全に禁じると、ぶんぶんぶんは5本編成が成立しなくなる（実測: 600シード×8設定すべて0本。
-    //   成立させるには複製ありの8〜9本編成が要る）。本人の言葉も「基本」なので、
-    //   強く割高にして「他に手が無ければ使う」扱いにする。
-    // ★脇から抜くのは「挟んだ手＝脇の反対側の手」だけ（2026-08-26 本人談:
-    //   左手のリングは右脇に挟み、取るときも左手）。右脇のリングを右手で抜くのは無理な動き。
-    //   投げたい手が違う場合は、禁止でも黙認でもなく **抜いてから渡す** 2段の手順にする。
-    //   （禁じるだけだと、ぶんぶんぶんは5本編成が成立しなくなる: 600シード×8設定すべて0本。
-    //     一方この2段なら 0.4秒足すだけで、本人が言う自然な動きのまま成立する）
-    let acqVia = null;   // 抜く役の手（投げ手と違うとき）
+     ★4段に分けてある（2026-09-04 レビュー#5。それまでは274行の単一関数だった）:
+       ①planAcquisition  どこから・どの手で取るか（手／脇／スタンド、「抜いてから渡す」2段）
+       ②findTossRoute    滞空の候補 × 取得の時期（直前／早取り保持／補充）から実行できる窓を探す
+       ③chooseCatch      受け手（演者・手）の選定。受け側の事情（直後の予定・脇側の腕・負荷）を費用に
+       ④tossCost         候補全体の費用（①〜③の結果と見せ場・希望滞空からの距離）
+     振る舞いは分割前と同一（tools/golden.mjs で全曲×seed×fix 475件のハッシュ一致を確認）。
+     いずれも _scheduleOnce の状態（perfs/rings/airborne/cfg）をクロージャで参照する。
+     状態をオブジェクトに束ねて外へ出す段階（単体テスト可能にする）は未着手。 */
+
+  // ① 取得計画: ring の今の居場所から、投げ手 handIdx が持つまでの所要と経路。
+  //    脇から抜くのは「挟んだ手＝脇の反対側の手」だけ（2026-08-26 本人談: 左手のリングは
+  //    右脇に挟み、取るときも左手）。投げたい手が違う場合は、禁止でも黙認でもなく
+  //    **抜いてから渡す** 2段の手順にする（acqVia が抜く役）。禁じるだけだと、ぶんぶんぶんは
+  //    5本編成が成立しなくなる（実測: 600シード×8設定すべて0本）。この2段なら 0.4秒足すだけ。
+  function planAcquisition(ring, perf, handIdx) {
+    let acqDur = 0, acqFrom = null, acqVia = null;
     if (ring.loc === "waki") {
       const side = ringWakiSide(perf, ring.id);
       const puller = side == null ? handIdx : 1 - side;   // 脇の反対側の手が抜く
@@ -666,24 +666,38 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       if (puller === handIdx) acqDur = C.T_WAKI;
       else { acqVia = puller; acqDur = C.T_WAKI + C.T_HANDOFF; }
     } else if (ring.loc === "stand") { acqDur = T_STAND; acqFrom = "stand"; }
+    return { acqDur, acqFrom, acqVia };
+  }
 
-    // 滞空時間の候補: 希望値を中心に外側へ探す。
-    // ★刻みは0.05（2026-08-23）。0.1刻みだと「基準±0.1の倍数」しか試せず、
-    // スライダーが0.95のとき1.00の成立窓に一度も届かない。テンポが速い曲では
-    // 成立窓が狭く、これが「滞空をわずかに動かすとパスが激減する」崖を作っていた
-    // （実測: ぶんぶんぶん96BPMで flight1.00=パス84% / 0.95=22%。0.05刻みで
-    // 0.95〜1.05が84%の平坦域になる）。
+  // 滞空時間の候補: 希望値を中心に外側へ探す。
+  // ★刻みは0.05（2026-08-23）。0.1刻みだと「基準±0.1の倍数」しか試せず、
+  // スライダーが0.95のとき1.00の成立窓に一度も届かない。テンポが速い曲では
+  // 成立窓が狭く、これが「滞空をわずかに動かすとパスが激減する」崖を作っていた
+  // （実測: ぶんぶんぶん96BPMで flight1.00=パス84% / 0.95=22%。0.05刻みで
+  // 0.95〜1.05が84%の平坦域になる）。
+  // 人間の編集（fix.level）があれば、その段に対応する滞空だけを fCandsUse に残す。
+  // ★fCandsUse を見るのは直前取得(a)だけで、早取り保持(b)と補充(c)は fCands のまま
+  //   （分割前からの挙動。高さ指定が(b)(c)に効かない点は既知として温存）。
+  function flightCandidates(fix) {
     const fCands = [];
     for (let d = 0; d <= 1.6; d += 0.05) {
       const a = +(cfg.flight + d).toFixed(2), b = +(cfg.flight - d).toFixed(2);
       if (b >= C.FLIGHT_MIN && b <= C.FLIGHT_MAX) fCands.push(b);
       if (d > 0 && a >= C.FLIGHT_MIN && a <= C.FLIGHT_MAX) fCands.push(a);
     }
-    // 人間の編集（ダイヤグラム上の指定。2026-08-26）: 高さの段が指定されていれば
-    // その段に対応する滞空だけを候補にする
     const fCandsUse = (fix && fix.level)
       ? fCands.filter(f => TOREI.throwLevel(f) === fix.level)
       : fCands;
+    return { fCands, fCandsUse };
+  }
+
+  // ② 投げ窓の探索: 実行できる (滞空 f, 取得時期 lead, 経路) を集めて最善を1つ返す。
+  //    「最初に見つかった1つ」ではなく候補を集めて選ぶ。早期returnにすると、
+  //    少し待てば成立する良い経路を取り逃す（実測で判明）。
+  function findTossRoute(ring, perf, handIdx, t, acq, fix) {
+    const hand = perf.hands[handIdx];
+    const { acqDur, acqFrom, acqVia } = acq;
+    const { fCands, fCandsUse } = flightCandidates(fix);
 
     // 1つの (f, lead, 取得時間, リング準備時刻) の組について実行可能性を判定
     const tryWindow = (f, lead, aDur, ready, aFrom) => {
@@ -744,8 +758,6 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       return { storeDur, storeTo, storedPoss, toParkedArm, acqVia, acqStart: acqStart0, lead, f, throwTime };
     };
 
-    // 経路の探索: 「最初に見つかった1つ」ではなく候補を集めて最善を選ぶ。
-    // 早期returnにすると、少し待てば成立する良い経路を取り逃す（実測で判明）。
     const opts = [];
     const push = (w, kind) => { if (w) { w.route = kind; opts.push(w); } };
 
@@ -804,14 +816,16 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     opts.sort((a, b) =>
       (a.storeDur + a.acqDur + a.lead * 0.05 + (a.restock ? 0.5 : 0)) -
       (b.storeDur + b.acqDur + b.lead * 0.05 + (b.restock ? 0.5 : 0)));
-    const found = opts[0];
+    return opts[0];
+  }
 
-    const { storeDur, storeTo, storedPoss, toParkedArm, acqStart, lead, f, throwTime } = found;
-
-    // キャッチ手の候補: 自分の両手 ＋（パッシング有効なら）他の演者の手。
-    // 投げ渡し(パス)はリングの持ち主がキャッチした演者に移る。
-    // forceCatch指定時は「保持キャッチ和音」用に、その特定の(演者,手)だけを候補にする
-    // （その手はforceCatch.chordRingを静かに持ったままキャッチを迎え、両方鳴って和音になる）。
+  // ③ 受け手の選定: 自分の両手 ＋（パッシング有効なら）他の演者の手から、
+  //    受け側の費用 cc が最小の (演者 q, 手 c) を返す。投げ渡し(パス)はリングの持ち主が
+  //    キャッチした演者に移る。forceCatch指定時は「保持キャッチ和音」用に、その特定の
+  //    (演者,手)だけを候補にする（その手はforceCatch.chordRingを静かに持ったままキャッチを
+  //    迎え、両方鳴って和音になる）。found は②の結果（退避先 storeTo/storedPoss を見る）。
+  function chooseCatch(ring, perf, handIdx, t, found, forceCatch, fix) {
+    const { storeTo, storedPoss } = found;
     let bestCatch = null;
     // 人間の編集: 受け手（演者・手）が指定されていれば候補をそこに絞る。
     // 和音の強制キャッチ（forceCatch）が最優先（和音は編集対象外）
@@ -887,8 +901,30 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       const cc = (isSelf ? selfCost : passCost) + q.load * 0.3 + busySoon + armCost;
       if (!bestCatch || cc < bestCatch.cc) bestCatch = { q, c, cc, chord: isChord };
     }
+    return bestCatch;
+  }
+
+  // ④ 費用: 準備の所要 ＋ 投げ手の負荷 ＋ 新規リング ＋ 滞空の好み ＋ 早取り ＋ 補充 ＋ 受け側の費用
+  function tossCost(perf, t, found, isNew, bestCatch) {
+    const { storeDur, acqDur, lead, f } = found;
+    return (storeDur + acqDur) + perf.load * 0.3 + (isNew ? 3 : 0)
+      // 見せ場の音は高い投げほど安く、それ以外は希望の滞空に近いほど安い
+      + (isShowcase(t) ? (C.FLIGHT_MAX - f) * 0.6 : Math.abs(cfg.flight - f) * 0.3)
+      + lead * 0.05
+      + (found.restock ? 0.5 : 0) + bestCatch.cc;
+  }
+
+  function planToss(ring, perf, handIdx, t, isNew, forceCatch, fix) {
+    if (ring.loc === "hand" && (ring.owner !== perf.id || ring.hand !== handIdx)) return null;
+    if ((ring.loc === "waki" || ring.loc === "stand") && ring.owner !== perf.id) return null;
+
+    const acq = planAcquisition(ring, perf, handIdx);
+    const found = findTossRoute(ring, perf, handIdx, t, acq, fix);
+    if (!found) return null;
+    const bestCatch = chooseCatch(ring, perf, handIdx, t, found, forceCatch, fix);
     if (!bestCatch) return null;
 
+    const { storeDur, storeTo, storedPoss, toParkedArm, acqStart, throwTime, f } = found;
     return {
       kind: "toss", ring, perf, handIdx, isNew,
       catchPerf: bestCatch.q, catchHand: bestCatch.c,
@@ -897,11 +933,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       acqDur: found.acqDur, acqFrom: found.acqFrom, acqStart,
       restock: found.restock || null,
       throwTime, flight: f,
-      cost: (storeDur + found.acqDur) + perf.load * 0.3 + (isNew ? 3 : 0)
-        // 見せ場の音は高い投げほど安く、それ以外は希望の滞空に近いほど安い
-        + (isShowcase(t) ? (C.FLIGHT_MAX - f) * 0.6 : Math.abs(cfg.flight - f) * 0.3)
-        + lead * 0.05
-        + (found.restock ? 0.5 : 0) + bestCatch.cc,
+      cost: tossCost(perf, t, found, isNew, bestCatch),
     };
   }
 
@@ -1254,7 +1286,39 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
 
   preassign();
 
-  /* --- 1音符を独立に割り当てる（和音でない場合の通常経路） --- */
+  /* --- 人間の指定（fix）を段階的に緩める ---
+     まず投げ手側だけ外す（受け手・高さは守る）→ それでも駄目なら全部外す。
+     どの段でも fixDrops を数え、採点が「指定を守れた編成」を強く選ぶようにする。
+     緩められた場合は警告を積んで {candidates, fix} を返す。どの段でも成立しなければ null
+     （その後は新規リング・振りの検討へ進む）。collectToss は呼び出し側の候補収集関数。 */
+  function relaxFix(note, fix, collectToss) {
+    let relaxed = null;
+    if (fix.throwPerf != null || fix.throwHand != null) {
+      const partial = { catchPerf: fix.catchPerf, catchHand: fix.catchHand, level: fix.level };
+      const cands2 = collectToss(partial);
+      if (cands2.some(p => p.kind === "toss")) {
+        relaxed = { candidates: cands2, fix: partial,
+          msg: `投げ手の指定どおりにできないため、投げ手だけ自動にしています（受け手と高さは指定どおり）` };
+      }
+    }
+    if (!relaxed) {
+      const free = collectToss(null);
+      if (free.some(p => p.kind === "toss")) {
+        relaxed = { candidates: free, fix: null,
+          msg: `指定どおり（受け手や高さの編集）には投げられないため、自動の割り当てで鳴らしています` };
+      }
+    }
+    if (!relaxed) return null;
+    warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
+      msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: ${relaxed.msg}` });
+    fixDrops++;
+    return relaxed;
+  }
+
+  /* --- 1音符を独立に割り当てる（和音でない場合の通常経路） ---
+     候補の集め方は 投げ（既存リング）→ 新規リングの投げ → 振り の順。
+     ★候補の順序は変えないこと: 直後の jitter で候補ごとに rnd() を消費するため、
+     順序が変わると乱数列がずれて seed 固定の再現が壊れる。 */
   function scheduleNoteIndependently(note) {
     let candidates = [];
     let fix = note.fix || null;
@@ -1281,30 +1345,10 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
     // 「編集は受け付けて、破綻は警告で示す」（2026-08-26 本人方針）。音を落とすより
     // 自動で鳴らして、指定どおりにできなかったことを警告に出す方が稽古の役に立つ
     if (fix && !candidates.some(p => p.kind === "toss")) {
-      // 段階的に緩める: まず投げ手側だけ外す（受け手・高さは守る）→ それでも駄目なら全部外す。
-      // どの段でも fixDrops を数え、採点が「指定を守れた編成」を強く選ぶようにする
-      let relaxed = null;
-      if (fix.throwPerf != null || fix.throwHand != null) {
-        const partial = { catchPerf: fix.catchPerf, catchHand: fix.catchHand, level: fix.level };
-        const cands2 = collectToss(partial);
-        if (cands2.some(p => p.kind === "toss")) {
-          relaxed = { candidates: cands2, fix: partial,
-            msg: `投げ手の指定どおりにできないため、投げ手だけ自動にしています（受け手と高さは指定どおり）` };
-        }
-      }
-      if (!relaxed) {
-        const free = collectToss(null);
-        if (free.some(p => p.kind === "toss")) {
-          relaxed = { candidates: free, fix: null,
-            msg: `指定どおり（受け手や高さの編集）には投げられないため、自動の割り当てで鳴らしています` };
-        }
-      }
+      const relaxed = relaxFix(note, fix, collectToss);
       if (relaxed) {
         candidates = relaxed.candidates;
-        warnings.push({ noteIdx: note.idx, t: note.t, midi: note.midi,
-          msg: `${fmtTime(note.t)} の ${TOREI.noteName(note.midi)}: ${relaxed.msg}` });
         fix = relaxed.fix;
-        fixDrops++;
       }
     }
 
@@ -1409,8 +1453,9 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
      挟んで抜くのに 0.7+0.7＝1.4秒も手を塞ぐので、間にその手が何もしないなら完全な損。
      計画時に先を読むのは難しいので、出来上がった行動列から後で消す。
      消す条件は「同じ手で挟んで同じ手で抜き、その間その手が他に何もしていない」。
-     消しても手が空く方向にしか動かないので、他の制約を壊すことはない。 */
-  {
+     消しても手が空く方向にしか動かないので、他の制約を壊すことはない。
+     （2026-09-04 レビュー#5: 無名ブロックだったものを関数に。3つの掃除を順に行う） */
+  function pruneWakiRoundTrips() {
     const drop = new Set();
     const tucks = actions.filter(a => a.type === "store" && a.to === "waki" && !a.prep);
     for (const st of tucks) {
@@ -1470,6 +1515,7 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
       actions.sort((a, b) => a.t - b.t);
     }
   }
+  pruneWakiRoundTrips();
 
   // 再生・表示の開始点は「開演前の儀式」を除いた最初の動作（2026-08-26 本人指示
   // 「準備が長すぎる。最初の人が投げ始めた瞬間くらいからスタートで」）。
@@ -1478,20 +1524,23 @@ TOREI._scheduleOnce = function (melody, cfg, seed) {
   const live = actions.filter(a => !a.prep);
   const minT = live.length ? Math.min(0, live[0].t) : 0;
 
-  // リングのラベル（同音が複数あるとき ド①ド② と区別）
-  const perPitch = {};
-  const pcOctaves = {};
-  for (const r of rings) {
-    perPitch[r.midi] = (perPitch[r.midi] || 0) + 1;
-    r.pitchIdx = perPitch[r.midi];
-    const pc = r.midi % 12;
-    (pcOctaves[pc] = pcOctaves[pc] || new Set()).add(Math.floor(r.midi / 12));
+  // リングのラベル（同音が複数あるとき ド①ド② と区別。オクターブ違いが混在すれば ド4/ド5）
+  function labelRings() {
+    const perPitch = {};
+    const pcOctaves = {};
+    for (const r of rings) {
+      perPitch[r.midi] = (perPitch[r.midi] || 0) + 1;
+      r.pitchIdx = perPitch[r.midi];
+      const pc = r.midi % 12;
+      (pcOctaves[pc] = pcOctaves[pc] || new Set()).add(Math.floor(r.midi / 12));
+    }
+    for (const r of rings) {
+      const multiOct = pcOctaves[r.midi % 12].size > 1;
+      const base = multiOct ? TOREI.noteNameFull(r.midi) : TOREI.noteName(r.midi);
+      r.label = base + (perPitch[r.midi] > 1 ? "①②③"[r.pitchIdx - 1] : "");
+    }
   }
-  for (const r of rings) {
-    const multiOct = pcOctaves[r.midi % 12].size > 1;
-    const base = multiOct ? TOREI.noteNameFull(r.midi) : TOREI.noteName(r.midi);
-    r.label = base + (perPitch[r.midi] > 1 ? "①②③"[r.pitchIdx - 1] : "");
-  }
+  labelRings();
 
   return { actions, rings, warnings, noteResults, minT, fixDrops };
 };

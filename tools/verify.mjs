@@ -114,6 +114,10 @@ results.push(["曲の音楽的整合性（analyze.mjs）", runTool("analyze.mjs 
 results.push(["物理的な不変条件（invariants.mjs）", runTool("invariants.mjs — 手の二重保持など", "tools/invariants.mjs")]);
 results.push(["両鳴り・回復時間（check_held_catch.mjs）", runTool("check_held_catch.mjs — 持ったままキャッチ", "tools/check_held_catch.mjs")]);
 results.push(["完成曲のハッシュ照合", checkFrozenIntegrity()]);
+// スケジューラーの出力そのものの回帰（2026-09-04 レビュー#5）。上の完成曲ハッシュは保存済みデータを
+// 見るだけで _scheduleOnce を再実行しない。こちらは全曲×seed×fix を実際に走らせて記録と照合する。
+// 振る舞いを意図して変えたときは node tools/golden.mjs --record で正を更新する
+results.push(["スケジューラー出力の黄金ハッシュ（golden.mjs）", runTool("golden.mjs — 全曲×seed×fix の出力一致", "tools/golden.mjs")]);
 
 console.log(`\n${"═".repeat(60)}`);
 console.log("検査結果まとめ");
