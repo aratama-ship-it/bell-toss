@@ -225,6 +225,24 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   };
 };
 
+/* 曲データ（js/songs.js の1エントリ、または songfile.js が組んだものと同じ形）から、
+   スケジュールを決める全ての入力の署名を作る（2026-09-04 レビュー#3）。
+   完成曲の焼き付け（js/frozen.js）は「どの楽譜のものか」を持っていなかったため、
+   songs.js を編集して1音でも変わると、古い焼き付けが黙って別の楽譜に貼り付いた。
+   焼き付け時にこの署名も保存し、読み込み時に今の曲データと突き合わせる。
+   Node（tools/freeze.mjs・verify.mjs）とブラウザ（js/main.js）の両方から同じ関数を呼ぶ。
+   note.fix は含めない: fix は演奏者の個別編集であって「曲そのもの」の一部ではなく、
+   曲を編集していないのに固定した投げが1つあるだけで焼き付けが無効になるのはおかしいため
+   （個々の編集による乖離は、ブラウザ側の stateSig が別途検出して確定編成を外す）。 */
+TOREI.songSignature = function (song) {
+  return JSON.stringify([
+    song.bpm, song.beatsPerBar, song.notes.map(n => [n.beat, n.midi]),
+    song.performers || 3, song.flight || 1.2, song.wakiCap ?? 1, song.maxDup ?? 2,
+    song.maxRings || null, song.allowShake ?? true, song.standTime || 2.0,
+    song.passMode || "more",
+  ]);
+};
+
 // 楽譜に書かれた和音（同時刻2音以上）の箇所数
 TOREI.countChordSpots = function (melody) {
   const m = new Map();

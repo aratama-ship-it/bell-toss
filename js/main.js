@@ -1682,7 +1682,16 @@
     // 稽古する振り付けが開くたびに変わらないようにするのが目的で、速さは副次的な利点。
     // 完成曲（焼き付け）＞確定seed＞探索、の順。焼き付けはスケジューラーが
     // どう変わっても振付が動かない（tools/freeze.mjs で生成）
-    const fz = (TOREI.FROZEN || {})[p.id];
+    let fz = (TOREI.FROZEN || {})[p.id];
+    // ★焼き付けは「どの楽譜のものか」の署名（melodySig）を持つ（2026-09-04 レビュー#3）。
+    // songs.js を編集して1音でも変わると、古い焼き付けが黙って別の楽譜に貼り付く事故に
+    // なるため、読み込むたびに今の楽譜と突き合わせる。不一致なら焼き付けを使わず、
+    // 通常どおり確定seed→探索の順にフォールバックする（この曲が未焼き付けだった扱い）
+    if (fz && (!fz.melodySig || fz.melodySig !== TOREI.songSignature(p))) {
+      showNotice(`「${p.name}」の完成版は古い楽譜のものです。最新の楽譜で自動的に組み直します`
+        + `（曲を確認して問題なければ tools/freeze.mjs で焼き直してください）`, true);
+      fz = null;
+    }
     freezeSeed(fz ? fz.seed : (TOREI.SEEDS || {})[p.id], fz || null);
     updateClearFixesBtn();
     recompute();

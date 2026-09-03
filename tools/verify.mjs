@@ -11,6 +11,8 @@
  *   1. 既存3ツールを実使用の既定条件で実行（曲・音楽的な整合性／不変条件／両鳴り・回復時間）
  *   2. 完成曲（js/frozen.js）のハッシュを、下の PINNED_HASHES に固定した値と照合。
  *      1文字でもズレたら「完成曲が動いた」ことを検出して落とす
+ *   3. 完成曲の melodySig（どの楽譜のものかの署名）を、今の js/songs.js の該当曲と照合
+ *      （2026-09-04 レビュー#3）。songs.js を編集して1音でも変われば不一致で検出する
  * を通し、1つでも不合格なら非0で終了する。デプロイ前に必ずこれを走らせる運用にする。
  *
  * 新しい曲を完成として焼き付けたら（tools/freeze.mjs）、このファイル冒頭の
@@ -51,10 +53,11 @@ function runTool(label, file, args = []) {
 }
 
 function checkFrozenIntegrity() {
-  process.stdout.write(`\n${"═".repeat(60)}\n▶ 完成曲（js/frozen.js）のハッシュ照合\n${"═".repeat(60)}\n`);
+  process.stdout.write(`\n${"═".repeat(60)}\n▶ 完成曲（js/frozen.js）のハッシュ・署名照合\n${"═".repeat(60)}\n`);
   globalThis.window = globalThis;
   globalThis.localStorage = { getItem: () => null, setItem: () => {} };
-  for (const f of ["js/presets.js", "js/songs.js", "js/frozen.js"]) {
+  // scheduler.js は TOREI.songSignature（melodySig照合に使う）を持つので追加で読む
+  for (const f of ["js/presets.js", "js/songs.js", "js/frozen.js", "js/scheduler.js"]) {
     vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), "utf8"), { filename: f });
   }
   const TOREI = globalThis.TOREI;
@@ -66,19 +69,41 @@ function checkFrozenIntegrity() {
   }
   let ok = true;
   for (const id of ids) {
-    const h = frozenHash(frozen[id].actions);
+    const entry = frozen[id];
+    const h = frozenHash(entry.actions);
     const pinned = PINNED_HASHES[id];
+    let entryOk = true;
     if (pinned == null) {
       console.log(`  ✗ ${id}: PINNED_HASHESに未登録（実測 ${h}）。`
         + ` tools/verify.mjs 冒頭に "${id}": "${h}" を追記して承認すること`);
-      ok = false;
+      entryOk = false;
     } else if (h !== pinned) {
       console.log(`  ✗ ${id}: 振付が変わっている！ 承認済み ${pinned} → 実測 ${h}`
         + `（スケジューラーの変更で完成曲が動いた可能性。意図した変更なら承認して`
         + ` PINNED_HASHES を更新、そうでなければ原因を調べること）`);
-      ok = false;
+      entryOk = false;
+    }
+    // melodySig: 焼き付け時の楽譜と、今の js/songs.js の該当曲が一致するか
+    const song = TOREI.SONGS.find(s => s.id === id);
+    if (!song) {
+      console.log(`  ✗ ${id}: js/songs.js に該当曲が見つからない（曲IDが変わった、または削除された）`);
+      entryOk = false;
+    } else if (!entry.melodySig) {
+      console.log(`  ✗ ${id}: melodySig が未設定（古い形式の焼き付け）。`
+        + ` node tools/freeze.mjs ${id} --resign で署名だけ追記できる`);
+      entryOk = false;
     } else {
-      console.log(`  ok ${id}: ${h}（承認済みと一致・seed${frozen[id].seed}・${frozen[id].frozenAt}凍結）`);
+      const nowSig = TOREI.songSignature(song);
+      if (nowSig !== entry.melodySig) {
+        console.log(`  ✗ ${id}: 楽譜が焼き付け時と変わっている（songs.jsが編集された）。`
+          + ` 曲の変更が意図的なら node tools/freeze.mjs ${id} <seed> で焼き直すこと`);
+        entryOk = false;
+      }
+    }
+    if (entryOk) {
+      console.log(`  ok ${id}: ${h}（承認済みと一致・楽譜も一致・seed${entry.seed}・${entry.frozenAt}凍結）`);
+    } else {
+      ok = false;
     }
   }
   return ok;
