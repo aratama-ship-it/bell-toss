@@ -447,8 +447,24 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
 .es-status { flex-basis: 100%; font-size: 11.5px; color: var(--ink-soft); min-height: 15px; }
 .es-status .ok { color: var(--brass); font-weight: 600; }
 .es-status .warn { color: var(--warn); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+/* 変更の履歴（2026-09-04 レビューB「DAWで言うアンドゥ履歴パネル」）。
+   選択の有無に関わらず出す小さな帯。行は「元に戻す」で時間を戻す対象ではなく、
+   クリックすると該当の投げへ飛ぶだけのナビゲーション（時間を戻すのは上の「元に戻す」）。 */
+.es-history {
+  border-top: 1px dashed var(--line);
+  padding: 8px 14px 10px;
+  font-size: 11px;
+}
+.es-history-head { color: var(--ink-soft); letter-spacing: 0.04em; margin-bottom: 4px; }
+.es-history ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.es-history li { color: var(--ink-soft); padding: 2px 0; }
+.es-history li.jumpable { cursor: pointer; color: var(--ink); }
+.es-history li.jumpable:hover { color: var(--brass); text-decoration: underline; }
+
 @media (pointer: coarse) {
   .es-seg button, .es-actions button { min-height: 44px; }
+  .es-history li.jumpable { min-height: 32px; display: flex; align-items: center; }
 }
 
 #btn-clear-fixes { font-size: 11px; margin-left: 6px; }

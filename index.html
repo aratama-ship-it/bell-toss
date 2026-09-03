@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-22</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.9.4-1</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -217,6 +217,14 @@
         </div>
         <div class="es-status" id="es-status"></div>
       </div>
+      <!-- 変更の履歴（2026-09-04 レビューB）。選択の有無に関わらず表示する
+           （選択を外した後も「元に戻す」で戻せることが分かるように）。
+           行のクリックは時間を巻き戻すのではなく該当の投げへ飛ぶだけ。時間を戻すのは
+           上の「元に戻す」ボタン（履歴を1件ずつ多段で取り消す） -->
+      <div class="es-history" id="es-history" hidden>
+        <div class="es-history-head">変更の履歴（直近5件）</div>
+        <ol id="es-history-list"></ol>
+      </div>
     </section>
     <p class="hint"><span class="edit-only">楽譜は<b>クリックで追加・ドラッグで移動・その場でクリックすると削除</b>。
       行動表の<b>投げ（白抜き丸）をクリックすると下の編集卓で組み直せます</b>（金の四角＝編集済み）。
@@ -275,6 +283,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js?v=6"></script>
 <script src="js/stage.js?v=11"></script>
-<script src="js/main.js?v=44"></script>
+<script src="js/main.js?v=45"></script>
 </body>
 </html>

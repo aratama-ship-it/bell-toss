@@ -162,11 +162,16 @@
      指定は音符の fix として持ち、スケジューラーが計画時の制約として尊重する。
      設計の要点（Codexの指摘を採用）:
      - 「おまかせ」には実際の解決結果を併記する（未指定と最適値の区別がつかないため）
-     - 即時適用＋1段の元に戻す。適用ボタンは「押したか」という余計な状態を増やすだけ
+     - 即時適用＋履歴ベースの多段アンドゥ（2026-09-04 レビューB。従来は1段だった）。
+       適用ボタンは「押したか」という余計な状態を増やすだけなので置かない
      - 1投の変更が後続に波及した数を報告し、変わった投げを数秒光らせる（信頼のため）
+     - 変更の履歴を最新5件パネルに出す。行をクリックすると該当の投げへ飛ぶ（時間を
+       巻き戻すのではなくナビゲーションのため。時間を戻したいときは「元に戻す」を使う）
      - 破綻は止めずに警告（既存方針）。ストリップに自然文で出し、クリックで該当箇所へ */
   let selNote = null;          // 選択中の noteIdx
-  let fixUndo = null;          // 直前の全fixスナップショット（1段）
+  let fixHistory = [];         // 変更履歴（多段アンドゥ・履歴パネルの両方が使う）
+  const FIX_HISTORY_LIMIT = 20; // 際限なく貯めない。パネル表示は直近5件のみ
+  let jumpToNoteFn = null;     // 履歴パネルの行クリック→該当の投げへ（setupFixEditor内で結線）
   function snapshotFixes() {
     return JSON.stringify(state.melody.notes.map(n => n.fix || null));
   }
@@ -186,6 +191,67 @@
       m[a.noteIdx] = [a.perf, a.hand, a.catchPerf, a.catchHand, Math.round(a.flight * 100)].join(",");
     }
     return m;
+  }
+  // 履歴の行に出す「音の身元」（例: 3小節2拍レ）
+  function noteTag(noteIdx) {
+    const note = state.melody.notes[noteIdx];
+    if (!note) return "";
+    const bpb = state.melody.beatsPerBar || 4;
+    const bar = Math.floor(note.beat / bpb) + 1, beat = Math.floor(note.beat % bpb) + 1;
+    return `${bar}小節${beat}拍${TOREI.noteName(note.midi)}`;
+  }
+  // セグメント操作1回ぶんの「何を→どうした」の文言。raw は select の値（""=おまかせ）
+  function fixFieldLabel(field, raw) {
+    const auto = raw === "" || raw == null;
+    if (field === "catchPerf") return `受ける人 → ${auto ? "おまかせ" : TOREI.perfName(+raw)}`;
+    if (field === "catchHand") return `受ける手 → ${auto ? "おまかせ" : ["左", "右"][+raw]}`;
+    if (field === "level") return `投げの高さ → ${auto ? "おまかせ" : raw}`;
+    return "編集";
+  }
+  // 履歴パネルを直近5件（新しい順）で描く。行をクリックすると該当の投げへ飛ぶ
+  function renderHistoryPanel() {
+    const wrap = $("es-history");
+    const list = $("es-history-list");
+    if (!wrap || !list) return;
+    if (!fixHistory.length) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    list.innerHTML = "";
+    for (const h of fixHistory.slice(-5).reverse()) {
+      const li = document.createElement("li");
+      li.textContent = h.label + (h.rippleCount ? `（波及${h.rippleCount}投）` : "");
+      if (h.jumpNoteIdx != null) {
+        li.className = "jumpable";
+        li.title = "クリックでこの投げへ";
+        li.addEventListener("click", () => { if (jumpToNoteFn) jumpToNoteFn(h.jumpNoteIdx); });
+      }
+      list.appendChild(li);
+    }
+  }
+  // 1回の変更をまとめて適用する共通処理: 適用前のスナップショットを履歴に積み、
+  // 波及した投げ（直接編集した音以外で見た目が変わった投げ）を検出して光らせる。
+  // touchedIdxs: 直接編集した音（波及の集計から除く／要素1つなら履歴行から飛べるようにする）
+  function commitFix(label, touchedIdxs, mutate) {
+    const before = snapshotFixes();
+    const beforeThrows = throwKeys();
+    mutate();
+    recompute();
+    updateClearFixesBtn();
+    const afterThrows = throwKeys();
+    const touched = new Set(touchedIdxs);
+    const changed = [];
+    for (const [idx, key] of Object.entries(afterThrows)) {
+      if (!touched.has(+idx) && beforeThrows[idx] !== key) changed.push(+idx);
+    }
+    TOREI.timeline.setFlash(changed);
+    drawTimelineOnly();
+    if (TOREI.timeline.clearFlashLater) TOREI.timeline.clearFlashLater(() => drawTimelineOnly());
+    fixHistory.push({
+      label, snapshot: before, rippleCount: changed.length,
+      jumpNoteIdx: touchedIdxs.length === 1 ? touchedIdxs[0] : null,
+    });
+    if (fixHistory.length > FIX_HISTORY_LIMIT) fixHistory.shift();
+    renderHistoryPanel();
+    return changed;
   }
 
   function setupFixEditor() {
@@ -228,21 +294,21 @@
       const perfItems = [{ value: "", label: `おまかせ<small>今: ${TOREI.perfName(th.catchPerf)}</small>` }];
       for (let p = 0; p < state.cfg.nPerformers; p++) perfItems.push({ value: String(p), label: TOREI.perfName(p) });
       seg($("es-perf"), perfItems, fix.catchPerf != null ? String(fix.catchPerf) : "",
-        (v) => applyFix({ catchPerf: v === "" ? null : +v }));
+        (v) => applyFix("catchPerf", v));
 
       seg($("es-hand"), [
         { value: "", label: `おまかせ<small>今: ${H[th.catchHand]}</small>` },
         { value: "0", label: "左" }, { value: "1", label: "右" },
       ], fix.catchHand != null ? String(fix.catchHand) : "",
-        (v) => applyFix({ catchHand: v === "" ? null : +v }));
+        (v) => applyFix("catchHand", v));
 
       const lvItems = [{ value: "", label: `おまかせ<small>今: ${TOREI.throwLevel(th.flight)}</small>` }];
       for (let l = 1; l <= 5; l++) lvItems.push({ value: String(l),
         label: l === 1 ? "1<small>低い</small>" : l === 5 ? "5<small>高い</small>" : String(l) });
       seg($("es-level"), lvItems, fix.level ? String(fix.level) : "",
-        (v) => applyFix({ level: v === "" ? null : +v }));
+        (v) => applyFix("level", v));
 
-      $("es-undo").disabled = !fixUndo;
+      $("es-undo").disabled = !fixHistory.length;
       const locked = !!(note.fix && note.fix.locked);
       const lockBtn = $("es-lock");
       lockBtn.textContent = locked ? "🔓 ロックを外す" : "🔒 この投げをロック";
@@ -256,28 +322,16 @@
     const setStatus = (html) => { $("es-status").innerHTML = html || ""; };
 
     // 部分更新（catchPerf / catchHand / level のどれか1つ）→ 即時適用
-    const applyFix = (patch) => {
+    const applyFix = (field, raw) => {
       if (selNote == null) return;
       const note = state.melody.notes[selNote];
-      fixUndo = snapshotFixes();
-      const fix = Object.assign({}, note.fix || {});
-      for (const [k, v] of Object.entries(patch)) {
-        if (v == null) delete fix[k]; else fix[k] = v;
-      }
-      note.fix = Object.keys(fix).length ? fix : null;
-
-      const before = throwKeys();
-      recompute();
-      updateClearFixesBtn();
-      // 波及: 編集した音以外で見た目が変わった投げ
-      const after = throwKeys();
-      const changed = [];
-      for (const [idx, key] of Object.entries(after)) {
-        if (+idx !== selNote && before[idx] !== key) changed.push(+idx);
-      }
-      TOREI.timeline.setFlash(changed);
-      drawTimelineOnly();
-      if (TOREI.timeline.clearFlashLater) TOREI.timeline.clearFlashLater(() => drawTimelineOnly());
+      const value = raw === "" || raw == null ? null : +raw;
+      const label = `${noteTag(selNote)}: ${fixFieldLabel(field, raw)}`;
+      const changed = commitFix(label, [selNote], () => {
+        const fix = Object.assign({}, note.fix || {});
+        if (value == null) delete fix[field]; else fix[field] = value;
+        note.fix = Object.keys(fix).length ? fix : null;
+      });
 
       // 状態の報告（自然文・破綻はクリックで該当箇所へ）
       const warn = (state.result.warnings || []).find(w => w.noteIdx === selNote);
@@ -324,6 +378,7 @@
       }
     };
     const deselect = () => { selNote = null; setStatus(""); renderStrip(); };
+    jumpToNoteFn = (idx) => selectNote(idx, true);   // 履歴パネルの行クリックから使う
 
     canvas.addEventListener("click", (ev) => {
       const r = canvas.getBoundingClientRect();
@@ -344,8 +399,8 @@
       if (ev.key === "Escape") { deselect(); }
       else if (ev.key === "ArrowLeft" && !ev.shiftKey) { ev.preventDefault(); ev.stopImmediatePropagation(); moveSel(-1); }
       else if (ev.key === "ArrowRight" && !ev.shiftKey) { ev.preventDefault(); ev.stopImmediatePropagation(); moveSel(1); }
-      else if (/^[1-5]$/.test(ev.key)) { applyFix({ level: +ev.key }); }
-      else if (ev.key === "0") { applyFix({ level: null }); }
+      else if (/^[1-5]$/.test(ev.key)) { applyFix("level", ev.key); }
+      else if (ev.key === "0") { applyFix("level", ""); }
     }, true);
 
     $("es-play").addEventListener("click", () => {
@@ -365,43 +420,53 @@
       const a = selNote != null ? throwOf(selNote) : null;
       if (!a) return;
       const note = state.melody.notes[selNote];
+      const tag = noteTag(selNote);
       if (note.fix && note.fix.locked) {
-        fixUndo = snapshotFixes();
-        note.fix = null;                       // 解除は「おまかせ」へ戻す
-        recompute(); updateClearFixesBtn(); renderStrip();
+        commitFix(`${tag}: ロックを解除`, [selNote], () => { note.fix = null; });  // 解除は「おまかせ」へ戻す
         setStatus('<span class="ok">ロックを外しました（おまかせに戻りました）</span>');
+        renderStrip();
         return;
       }
-      fixUndo = snapshotFixes();
-      note.fix = {
-        locked: true,
-        throwPerf: a.perf, throwHand: a.hand,
-        catchPerf: a.catchPerf, catchHand: a.catchHand,
-        level: TOREI.throwLevel(a.flight),
-      };
-      recompute(); updateClearFixesBtn(); renderStrip();
+      commitFix(`${tag}: ロック`, [selNote], () => {
+        note.fix = {
+          locked: true,
+          throwPerf: a.perf, throwHand: a.hand,
+          catchPerf: a.catchPerf, catchHand: a.catchHand,
+          level: TOREI.throwLevel(a.flight),
+        };
+      });
       setStatus('<span class="ok">ロックしました。</span>他を編集してもこの投げは動きません');
+      renderStrip();
     });
 
     $("es-auto").addEventListener("click", () => {
       if (selNote == null) return;
-      applyFix({ catchPerf: null, catchHand: null, level: null });
+      const tag = noteTag(selNote);
+      const note = state.melody.notes[selNote];
+      commitFix(`${tag}: おまかせに戻す`, [selNote], () => { note.fix = null; });
+      setStatus('<span class="ok">おまかせに戻しました</span>');
+      renderStrip();
     });
+    // 履歴ベースの多段アンドゥ（2026-09-04 レビューB。従来は1段だった）。
+    // 押すたびに直近の変更を1つずつ取り消す。DAWのアンドゥ履歴と同じ考え方
     $("es-undo").addEventListener("click", () => {
-      if (!fixUndo) return;
-      restoreFixes(fixUndo);
-      fixUndo = null;
+      if (!fixHistory.length) return;
+      const last = fixHistory.pop();
+      restoreFixes(last.snapshot);
       recompute();
       updateClearFixesBtn();
-      setStatus('<span class="ok">元に戻しました</span>');
+      renderHistoryPanel();
+      setStatus(`<span class="ok">元に戻しました：</span>${last.label}`);
       renderStrip();
     });
 
     $("btn-clear-fixes").addEventListener("click", () => {
-      fixUndo = snapshotFixes();
-      for (const n of state.melody.notes) n.fix = null;
-      recompute();
-      updateClearFixesBtn();
+      // 曲全体が対象なので「該当の投げへ飛ぶ」は付けない（jumpNoteIdxはnullのまま）
+      const touched = [];
+      state.melody.notes.forEach((n, i) => { if (n.fix) touched.push(i); });
+      commitFix("全ての編集を解除", touched, () => {
+        for (const n of state.melody.notes) n.fix = null;
+      });
       renderStrip();
     });
 
@@ -424,29 +489,32 @@
       });
       if (!idxs.length) { showNotice(`${bar + 1}小節目にロックできる投げがありません`); return; }
       const allLocked = idxs.every(i => state.melody.notes[i].fix && state.melody.notes[i].fix.locked);
-      fixUndo = snapshotFixes();
       if (allLocked) {
-        for (const i of idxs) state.melody.notes[i].fix = null;
-        recompute(); updateClearFixesBtn(); renderStrip();
+        commitFix(`${bar + 1}小節目のロックを解除`, idxs, () => {
+          for (const i of idxs) state.melody.notes[i].fix = null;
+        });
         showNotice(`${bar + 1}小節目のロックを外しました（${idxs.length}投）`);
+        renderStrip();
         return;
       }
       let locked = 0;
-      for (const i of idxs) {
-        const th = throwOf(i);
-        if (!th) continue;   // 振りで鳴る音などはそのまま
-        state.melody.notes[i].fix = {
-          locked: true,
-          throwPerf: th.perf, throwHand: th.hand,
-          catchPerf: th.catchPerf, catchHand: th.catchHand,
-          level: TOREI.throwLevel(th.flight),
-        };
-        locked++;
-      }
-      recompute(); updateClearFixesBtn(); renderStrip();
+      commitFix(`${bar + 1}小節目をロック`, idxs, () => {
+        for (const i of idxs) {
+          const th = throwOf(i);
+          if (!th) continue;   // 振りで鳴る音などはそのまま
+          state.melody.notes[i].fix = {
+            locked: true,
+            throwPerf: th.perf, throwHand: th.hand,
+            catchPerf: th.catchPerf, catchHand: th.catchHand,
+            level: TOREI.throwLevel(th.flight),
+          };
+          locked++;
+        }
+      });
       const dropped = (state.result.warnings || []).filter(w => idxs.includes(w.noteIdx)).length;
       showNotice(`${bar + 1}小節目の${locked}投をロックしました`
         + (dropped ? `（うち${dropped}投は指定どおりにできず警告が出ています）` : "。他を編集しても動きません"));
+      renderStrip();
     });
 
     // recompute後にストリップを追随させるための公開
