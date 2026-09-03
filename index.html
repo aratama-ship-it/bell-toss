@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=28">
+<link rel="stylesheet" href="css/style.css?v=29">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.9.4-4</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.9.4-5</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -194,6 +194,10 @@
         <div class="es-id">
           <div class="es-note" id="es-note"></div>
           <div class="es-route" id="es-route"></div>
+          <!-- 選択中はこの一行（2026-09-04 レビュー#7）。以前は空欄のときだけ出ていて、
+               投げを選んだ瞬間に消えるため「←→で再生位置を動かせない理由」が画面から
+               読み取れなかった（設計上は妥当な仕様だが、その説明が見えなくなっていた） -->
+          <div class="es-keys-active">←→で前後の投げへ ／ 1〜5で高さ ／ 0でおまかせ ／ Escで解除（解除中は←→が再生位置へ戻る）</div>
         </div>
         <div class="es-groups">
           <div class="es-group">
@@ -277,11 +281,11 @@
   <script src="js/seeds.js?v=10"></script>
   <script src="js/frozen.js?v=2"></script>
 <script src="js/scheduler.js?v=31"></script>
-<script src="js/audio.js"></script>
+<script src="js/audio.js?v=1"></script>
 <script src="js/midi.js?v=2"></script>
 <script src="js/pianoroll.js?v=3"></script>
 <script src="js/navigator.js?v=1"></script>
-<script src="js/timeline.js?v=6"></script>
+<script src="js/timeline.js?v=7"></script>
 <script src="js/stage.js?v=11"></script>
 <script src="js/main.js?v=47"></script>
 </body>

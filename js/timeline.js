@@ -49,7 +49,7 @@ TOREI.timeline = (() => {
 
   // 和音のキャッチ点は同じ(演者,手,時刻)に2つ乗るので上下にずらす（drawとlayoutActionで共有）
   function catchLaneY(a) {
-    const y = rowY(0, a.hand) - 0 * BAND_H; // バンド内ローカル（layoutAction用）
+    const y = rowY(0, a.hand); // バンド内ローカル（layoutAction用）
     return a.chordRole === "held" ? y - 4.5 : a.chordRole === "new" ? y + 4.5 : y;
   }
 
@@ -188,20 +188,19 @@ TOREI.timeline = (() => {
       const y = sp.kind === "stand"
         ? standY(n, standLayout(state.result).assign.get(sp.ring + ":" + sp.from) || 0)
         : rowY(sp.perf, sp.row);
-      const yo = 0;
       const color = TOREI.pitchColor(ring.midi, 0.9);
       ctx.fillStyle = TOREI.pitchColor(ring.midi, sp.kind === "hand" ? 0.30 : 0.16);
       ctx.strokeStyle = TOREI.pitchColor(ring.midi, sp.kind === "hand" ? 0.75 : 0.4);
       ctx.lineWidth = 1;
       const h = sp.kind === "hand" ? 9 : 7;
       ctx.beginPath();
-      ctx.roundRect(x1, y + yo - h / 2, Math.max(3, x2 - x1), h, 3);
+      ctx.roundRect(x1, y - h / 2, Math.max(3, x2 - x1), h, 3);
       ctx.fill(); ctx.stroke();
       // 帯が十分広ければリング名を書く
       if (x2 - x1 > 26) {
         ctx.font = "600 9px 'Hiragino Sans', sans-serif";
         ctx.fillStyle = color;
-        ctx.fillText(ring.label, x1 + 3, y + yo - h / 2 - 2);
+        ctx.fillText(ring.label, x1 + 3, y - h / 2 - 2);
       }
     }
 

@@ -9,7 +9,10 @@
  *
  * 一方でブラウザは編集のたびに再計算するため、大きな探索量は置けない（200シードで最長1.3秒）。
  * そこで役割を分ける:
- *   - このツール = 時間をかけて（既定2000シード）曲ごとの最良を選び、seed を js/seeds.js に書く
+ *   - このツール = 時間をかけて（コード上の既定は2000シードだが、実際に js/seeds.js を
+ *     書き出すときは毎回 --budget 8000 を指定している。js/seeds.js の生成コメントに
+ *     使った探索量が残るので、そちらが実際の値の記録。2026-09-04 レビュー#9で判明した
+ *     ズレ）曲ごとの最良を選び、seed を js/seeds.js に書く
  *   - ブラウザ  = seed があればそれを1回再現するだけ（数ミリ秒・毎回まったく同じ編成）
  *
  * 固めることの本当の価値は速さではなく再現性にある。稽古して本番に持っていく振り付けが、
@@ -17,9 +20,9 @@
  * 楽譜を編集した時点で seed は捨てられ、通常の探索に戻る（main.js 側で処理）。
  *
  * 使い方:
- *   node tools/optimize.mjs                 全曲（既定2000シード）→ js/seeds.js を書き出す
+ *   node tools/optimize.mjs                 全曲（コード上の既定=2000シード）→ js/seeds.js を書き出す
+ *   node tools/optimize.mjs --budget 8000   配布用に焼き直すときの実際の探索量（★これを使う）
  *   node tools/optimize.mjs bunbun          1曲だけ試す（書き出さず結果を表示）
- *   node tools/optimize.mjs --budget 5000   探索量を変える
  *   node tools/optimize.mjs --dry           書き出さずに全曲の結果だけ見る
  */
 import fs from "node:fs";
