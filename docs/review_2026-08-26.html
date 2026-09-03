@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投鈴 レビュー 2026-08-26 — 内部とUI/UX</title>
+<style>
+  :root { --ink:#2c313a; --soft:#6b6f78; --paper:#f6f3ec; --panel:#efe9dc; --line:#d9d2c3; --brass:#a9822f; --warn:#b2472e; --ok:#3d7a5a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif; color:var(--ink); background:var(--paper); line-height:1.65; font-size:14.5px; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { color: var(--soft); font-size: 12.5px; margin-bottom: 22px; }
+  h2 { font-size: 17px; margin: 34px 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--brass); }
+  h3 { font-size: 14.5px; margin: 18px 0 6px; }
+  .ask { background: #fff8e6; border: 1px solid var(--brass); border-left: 6px solid var(--brass); padding: 14px 16px; border-radius: 6px; }
+  .ask ol { margin: 6px 0 0 18px; padding: 0; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 12px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card .k { font-size: 11px; color: var(--soft); letter-spacing: .06em; }
+  .card .v { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .card .s { font-size: 12px; color: var(--soft); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0 14px; background: #fff; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--panel); font-weight: 600; white-space: nowrap; }
+  .sev { display:inline-block; padding:1px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 700; color:#fff; white-space: nowrap; }
+  .s1 { background: var(--warn); } .s2 { background: #c8772c; } .s3 { background: var(--brass); } .s4 { background: #8a8f99; } .s0 { background: var(--ok); }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #eee8da; padding: 1px 5px; border-radius: 3px; }
+  pre { background: #2c313a; color: #f2eee4; padding: 12px 14px; border-radius: 6px; font-size: 12px; overflow-x: auto; }
+  .finding { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 10px 0; background: #fff; }
+  .finding h3 { margin: 0 0 6px; }
+  .tag { font-size: 11px; color: var(--soft); }
+  .ev { margin: 6px 0; padding: 8px 10px; background: var(--panel); border-radius: 5px; font-size: 12.5px; }
+  .ev b { color: var(--brass); }
+  .fix { margin-top: 6px; font-size: 13px; }
+  .fix b { color: var(--ok); }
+  ul { margin: 6px 0 6px 18px; padding: 0; }
+  .small { font-size: 12px; color: var(--soft); }
+  .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin: 8px 0; }
+  .flow span { background: var(--panel); border:1px solid var(--line); padding: 5px 10px; border-radius: 16px; font-size: 12.5px; }
+  .flow em { font-style: normal; color: var(--soft); }
+  @media (max-width: 640px) { body { font-size: 14px; } th, td { padding: 6px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>投鈴 レビュー（内部 → UI/UX）</h1>
+  <div class="meta">対象: アプリ v2026.8.26-18（コミット 17bdfca）／確認日 2026-08-26／方法: 全ソース読解＋ローカル実機での再現検証。事実・解釈・提案・未確認を分けて書いています。</div>
+
+  <section class="ask">
+    <strong>判断してほしいこと</strong>
+    <ol>
+      <li><b>重大バグ2件（下の #1・#2）を先に直してよいか。</b> どちらも小さな修正（合わせて1時間以内）で、完成曲の保証に直結します。</li>
+      <li>内部の整理（#3〜#6）は「クライアント納品の前」に入れるか、「納品後の落ち着いた時期」に回すか。</li>
+      <li>UI/UXは「完成版バッジ」（E）を最初に入れる提案です。今回のバグを人間の目で発見できるようになります。</li>
+    </ol>
+  </section>
+
+  <h2>要約</h2>
+  <div class="cards">
+    <div class="card"><div class="k">コード量</div><div class="v">約8,000行</div><div class="s">JS 4,900 / CSS 770 / tools 1,700</div></div>
+    <div class="card"><div class="k">重大</div><div class="v" style="color:var(--warn)">2件</div><div class="s">完成曲の保証が破れる</div></div>
+    <div class="card"><div class="k">中</div><div class="v">5件</div><div class="s">保守性・検証の自動化</div></div>
+    <div class="card"><div class="k">全曲検証</div><div class="v" style="color:var(--ok)">通過</div><div class="s">不可能0・両鳴り0・不変条件0</div></div>
+  </div>
+  <p>土台は健全です。物理モデル（両鳴り・回復時間・脇の左右）と検証ツール3種は実測に基づいて作られており、振付そのものの品質は高い。問題は<b>「完成曲を守る仕組み」に穴が2つある</b>ことと、<b>スケジューラーが巨大な1関数に育ってしまい、変更のたびに実測で確かめるしかない</b>ことです。UI/UXは方向が固まっており、次は「いま自分が何を見ているか（完成版か、編集中か）」を常時見せることが最優先です。</p>
+
+  <h2>内部レビュー（重大度順）</h2>
+
+  <div class="finding">
+    <h3><span class="sev s1">重大</span> #1 自動保存からの復元で、完成曲の焼き付けが効かない</h3>
+    <div class="tag">js/main.js <code>applySongData</code>（復元経路）／<code>init()</code> 1830行付近／<code>freezeSeed</code> は <code>loadPreset</code> 1582行でしか呼ばれない</div>
+    <div class="ev"><b>事実（再現済み）:</b> <code>?song=bunbun</code> で開く → 400ms後に自動保存 → URLのパラメータなしで開き直す → 復元経路は <code>applySongData</code> を通り、焼き付けも確定seedも適用されないまま200シード探索が走る。結果: <b>パス82%→76%、開始時の構えが「右手ミ／左手ソ」→「左手ソ／右脇ミ」</b>に変化。セレクタは「ぶんぶんぶん」のまま、通知も出ない（楽譜は同一なので「編集済み」判定にならず、通知文自体が出ない）。</div>
+    <p><b>影響:</b> 「完成曲は1ミリも動かない」という保証が、ブックマークやリロードという最も普通の操作で破れます。クライアントが焼き付け版と違う振付を稽古する事故につながります。</p>
+    <div class="fix"><b>修正案（小）:</b> 復元時に「保存データが元のプリセットと同一」なら <code>loadPreset(saved.id)</code> に流す（焼き付け・seed・UIの初期化が全部そちらにある）。差分があるときだけ <code>applySongData</code>。加えて <code>applySongData</code> の末尾で「元のプリセットに一致すれば <code>freezeSeed</code> を適用」を入れると二重に安全。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s1">重大</span> #2 探索の早期打ち切りが「ロック破り」を見ていない</h3>
+    <div class="tag">js/scheduler.js <code>TOREI.schedule</code> 258〜260行</div>
+    <div class="ev"><b>事実:</b> 打ち切り条件は <code>fails===0 &amp;&amp; shakes===0 &amp;&amp; chordMiss===0 &amp;&amp; openPass &amp;&amp; passRate≥0.6</code>。<code>fixDrops</code>（人間の指定・ロックを守れなかった回数）が含まれていない。採点では×50で強く罰しているが、打ち切りはそれより前に起きる。</div>
+    <p><b>影響:</b> ロックを破ったシードが上の条件を満たすと、そこで探索が止まり、より良い（ロックを守る）シードに到達しない。今日の実測でロックが守られたのは、最初の候補が偶然ロックを守っていたため。<b>ロックの信頼性が運に依存している</b>状態です。</p>
+    <div class="fix"><b>修正案（1行）:</b> 打ち切り条件に <code>&amp;&amp; (m.fixDrops||0)===0</code> を追加。加えて、人間の指定が1つでもある曲では早期打ち切りを無効化して200シード全部回す（編集中の数百msは許容範囲）と、ロックの安定性がさらに上がる。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s2">高</span> #3 焼き付けデータに「どの楽譜のものか」の証明がない</h3>
+    <div class="tag">js/frozen.js／tools/freeze.mjs／js/main.js <code>freezeSeed</code></div>
+    <div class="ev"><b>事実:</b> <code>frozen.js</code> は seed・日付・行動列を持つが、対応する楽譜（音符・BPM・設定）のハッシュを持たない。<code>songs.js</code> を再生成して1音でも変われば、焼き付けは黙って別の楽譜に貼り付く。</div>
+    <div class="fix"><b>修正案:</b> 焼き付け時に楽譜＋設定の署名（<code>stateSig</code> と同じ形）を保存し、読み込み時に照合。不一致なら「焼き付けが古い」と通知して探索に落とす。検証ツールにも同じ照合を入れる。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s2">高</span> #4 検証が「人が3つのツールを覚えて回す」前提で、自動化されていない</h3>
+    <div class="tag">tools/analyze.mjs・invariants.mjs・check_held_catch.mjs／package.json なし／CI なし</div>
+    <div class="ev"><b>事実:</b> 今日一日で私はこの3本を十数回手で回した。忘れれば壊れたまま公開できる（実際、fixDrops の見落とし #2 はツールでは検出できない種類の穴）。</div>
+    <div class="fix"><b>修正案:</b> <code>tools/verify.mjs</code> 1本に統合し、①3種の検査、②焼き付けの署名照合、③完成曲のハッシュ固定（bunbun=2db3c6b6…）を回して、1つでも落ちたら非0で終了。デプロイ前に必ず実行する運用に。将来 GitHub Actions に載せれば push 時に自動化できる。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> #5 スケジューラーの巨大関数</h3>
+    <div class="tag">js/scheduler.js <code>_scheduleOnce</code>（265〜1480行、約1,200行の単一クロージャ）／<code>planToss</code> 274行／<code>scheduleNoteIndependently</code> 250行</div>
+    <p><b>解釈:</b> 物理ルールが増えるたびに <code>planToss</code> の中に条件が足されてきた（脇の左右・抜いてから渡す2段・見せ場・ロック…）。単体テストが書けず、「変更→全曲実測」でしか安全を確かめられない。今日のようにルール追加が続く限り、回帰のリスクは増える一方。</p>
+    <div class="fix"><b>修正案（段階的）:</b> まず <code>planToss</code> を「取得計画（脇/スタンド/手）」「投げ窓の判定」「受け手の選定」「コスト計算」の4つに切る。次に <code>_scheduleOnce</code> の状態（perfs・rings・airborne・warnings）をオブジェクトに束ね、各関数がそれを受け取る形へ。振る舞いは変えず、全曲ハッシュ照合で同一性を確認しながら進める。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> #6 採点の重みが散在している</h3>
+    <div class="tag">js/scheduler.js <code>scoreResult</code>（1000／50／10／2／3／8／6／100／0.6／1.0／0.5／0.4…）と <code>TOREI.EFFORT</code>、計画時コスト（<code>WAKI_ARM_COST</code> ほか <code>SCHED</code> 定数）</div>
+    <p><b>解釈:</b> 一部は <code>EFFORT</code> に集約されUIから触れるが、パスの頭打ち（0.70/0.80）や冒頭パス（1.0）などはコードに直書き。「どの重みが何を動かすか」の一覧がなく、次に重みを足すときに衝突（例: 高さを揃える vs バリエーション）を見落としやすい。</p>
+    <div class="fix"><b>修正案:</b> 重みを1つの表 <code>TOREI.WEIGHTS</code>（名前・既定値・単位・由来日）にまとめ、<code>scoreResult</code> はそれだけを参照。UIの「無理のなさ」パネルもこの表から生成する。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> #7 キーボード操作が二系統で、衝突する</h3>
+    <div class="tag">js/main.js 編集卓の <code>keydown</code>（capture, ←→=前後の投げ・1〜5=高さ）と <code>onKey</code>（←→=再生位置の16分移動・Shift+←→=小節）</div>
+    <p><b>事実:</b> 投げを選択している間は ←→ が「前後の投げ」に奪われ、再生位置の移動ができない（Escで解除すれば戻る）。設計上は妥当だが、画面にそのルールが出ていないので「矢印が効かない」と感じる場面が出る。</p>
+    <div class="fix"><b>修正案:</b> ルールを一本化して画面に明記（「投げを選択中は ←→ で投げを移動、Esc で解除」は編集卓の空欄に既に書いてある。選択中の編集卓にも同じ一行を出す）。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> #8 自動保存が「曲IDごと」ではない</h3>
+    <div class="tag">js/songfile.js キー <code>torei.work</code> 1つ／曲を切り替えると上書き</div>
+    <p><b>解釈:</b> 作曲者1人の作業には十分だが、クライアントが「第九を組み直し→ぶんぶんぶんを確認→第九に戻る」と操作した瞬間に第九の編集が消える（通知は出るが、消える事実は変わらない）。</p>
+    <div class="fix"><b>修正案:</b> キーを <code>torei.work.&lt;曲id&gt;</code> にして曲ごとに保持。加えて「この曲の編集を破棄して完成版へ戻す」ボタンを明示的に置く。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s4">低</span> #9 細かな整理</h3>
+    <ul>
+      <li><code>js/presets_backup_2026-08-22.js</code>: どこからも読まれていない。iCloud同期の対象にもなるので、archives へ移すか削除（削除は本人承認フローで）。</li>
+      <li><code>js/audio.js</code> だけ <code>?v=</code> が無い（index.html 265行）。次に音源を変えたときキャッシュで更新が届かない。</li>
+      <li><code>js/timeline.js</code>: 死んだ変数 <code>yo = 0</code>、<code>catchLaneY</code> の <code>- 0 * BAND_H</code>。動作に害はないが読み手を迷わせる。</li>
+      <li><code>tools/optimize.mjs</code> のヘッダ説明が「既定2000シード」のままだが、実運用は 8000。文書と実態を揃える。</li>
+      <li>MIDI取り込み（main.js <code>parseMidi</code>）: SMPTE非対応は明示エラーになっている（良い）。<b>未確認:</b> 拍子メタ（0x58）を読んで <code>beatsPerBar</code> に反映しているか。反映していなければ 3/4 の曲を読むと 4/4 として並ぶ。</li>
+    </ul>
+  </div>
+
+  <h3>良い点（維持すべきもの）</h3>
+  <ul>
+    <li>物理モデルの決め方が一貫して「本人の実演知識 → 実測で重みを決める」になっている（両鳴り・回復時間・脇の左右・見せ場の重み3.0など）。根拠がPROJECT_NOTESに残っている。</li>
+    <li>完成曲を「振付データそのもの」で焼き付ける判断は正しい（seed固定では守れないことを実証した上での設計）。#1・#3 を塞げば堅い。</li>
+    <li>検証ツールが3軸（音楽・物理・不変条件）で分かれており、何が壊れたかが分かる。</li>
+    <li>音の同期（出力遅延の補正、ループ境界の算術連結）は堅実。Safariの非対応も手動補正で逃がしている。</li>
+  </ul>
+
+  <h2>UI/UX レビュー</h2>
+  <p class="small">前提: 使うのは音楽の演出家（非エンジニア）。場面は「最適化された振付を見て、譲れない箇所を固め、残りを組み直す」。設計方針（第一案の固有性・中心体験の深さ）に照らして見ています。</p>
+
+  <div class="finding">
+    <h3><span class="sev s1">最優先</span> E. 「いま見ているものは何か」が画面に出ていない</h3>
+    <p><b>事実:</b> 完成版（焼き付け）・確定seed・編集中・探索中の4状態があるのに、画面上の手がかりは金の四角と🔒だけ。#1 のバグが人の目に見えなかったのはこのため。</p>
+    <div class="fix"><b>提案:</b> 曲名の横に状態バッジを常時表示。「<b>完成版</b>（凍結・2026-08-26）」「<b>編集中</b>（完成版から離れています ／ 戻す）」「<b>おまかせ</b>（探索結果）」。編集で自動的に切り替わり、「戻す」で完成版へ復帰。これは機能というより<b>信頼の表示</b>で、クライアントに渡す前に必ず要る。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s2">高</span> A. 上部の設定群がクライアントにはノイズ</h3>
+    <p><b>事実:</b> 演者数・滞空・脇の本数・スタンド持ち替え・パッシング・リング上限・振り・音ズレ補正＋「無理のなさ」6項目が、舞台のすぐ下に常時並ぶ。これらは作曲者（あなた）の道具で、演出家が触るものではない。</p>
+    <div class="fix"><b>提案:</b> 画面を2つの役割に分ける。既定は「見る・組み直す」画面（舞台／再生／ダイヤグラム／編集卓／Qシート）。設定群は「作曲者の設定」として1つの折りたたみに収め、開いたときだけ出す。共有リンクに <code>?mode=client</code> を付けたら設定を隠す、でも良い。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s2">高</span> B. 編集卓の「波及」表示が消えてしまう</h3>
+    <p><b>事実:</b> 「後続◯投も変わった」は2.6秒で光が消え、状態行の文も次の操作で上書きされる。演出家が「何が変わったか」を後から辿れない。</p>
+    <div class="fix"><b>提案:</b> 編集卓に小さな「変更の履歴」（最新5件: 何を→どうした→何投に波及、クリックで該当箇所へ）。「元に戻す」も1段から履歴ベースの多段へ。DAWで言うアンドゥ履歴パネル。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> C. ダイヤグラムの色: 複製リング（ミ①・ミ②）が同色</h3>
+    <p><b>事実:</b> 色は音高で決まるので、複製2本は帯のラベルでしか区別できない。帯が細い区間では追えない。</p>
+    <div class="fix"><b>提案:</b> ②以降を斜線（ハッチ）や点線の縁で描き分ける。色数は増やさない（音高=色の対応を崩さない）。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> D. iPadでの操作が想定されていない部分</h3>
+    <p><b>事実:</b> ループ範囲は option+ドラッグ（PC前提）。44pxのタッチ対応は入っているが、option キーはない。楽譜の音符移動もドラッグ前提。</p>
+    <div class="fix"><b>提案:</b> ループは「この小節を反復」＋「反復範囲を広げる/狭める」ボタンで代替できると明記。iPadは <b>未検証</b>なので、クライアントが iPad を使うなら一度実機で通しで確認する。</div>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s3">中</span> F. 言葉の混在</h3>
+    <ul>
+      <li>「パッシング: 多め／natural／off」— 選択肢が英語混じり。「多め／必要なときだけ／なし」に。</li>
+      <li>「同音リング最大」「リング上限」「脇に挟める数」— 単位の「本」が付くものと付かないものがある。揃える。</li>
+      <li>編集卓の「おまかせ」「受ける人」「受ける手」「投げの高さ」は良い。同じ語彙を設定群にも波及させる（例: 「振り」→「手元で振って鳴らす」は既に良い）。</li>
+    </ul>
+  </div>
+
+  <div class="finding">
+    <h3><span class="sev s4">低</span> G. その他</h3>
+    <ul>
+      <li>Qシートと編集卓の連動: 編集卓で投げを選んだら、Qシートの該当行も強調すると「紙で見る手順」と「図」がつながる。</li>
+      <li>舞台の名札の下線は薄すぎて「押せる」と気づきにくい。ホバーで濃くする程度でよい。</li>
+      <li>アクセシビリティ: canvas主体で読み上げは対象外と割り切っている（妥当）。focus-visible・44px は入っている。色のみの区別は帯ラベルで補われている。</li>
+    </ul>
+  </div>
+
+  <h2>推奨する順序</h2>
+  <div class="flow">
+    <span>#1 復元バグ</span><em>→</em><span>#2 打ち切り条件</span><em>→</em><span>E 状態バッジ</span><em>→</em><span>#4 verify 1本化</span><em>→</em><span>#3 焼き付け署名</span><em>→</em><span>A 設定の分離</span><em>→</em><span>#8 曲ごと保存</span><em>→</em><span>B 履歴</span><em>→</em><span>#5 分割（納品後）</span>
+  </div>
+  <p>最初の3つは今日中に入り、クライアント共有の前提になります。#5 は振る舞いを変えない作業なので、納品して落ち着いてから。</p>
+
+  <h2>不確実性・未確認</h2>
+  <ul>
+    <li>MIDI取り込みの拍子メタ反映は未確認（#9）。</li>
+    <li>Safari実機・iPad実機での通し確認は未実施（自動確認ブラウザはアニメーション停止のため、動きの体感は確認できていない）。</li>
+    <li>#5 の分割は工数の見積もりが粗い（半日〜1日）。振る舞いの同一性は全曲ハッシュ照合で担保する前提。</li>
+  </ul>
+
+  <h2>参考: 検証の証拠</h2>
+  <pre>全34曲: 不可能0 / 和音23箇所すべて鳴る（1手21） / 両鳴り0 / 回復時間違反0 / 不変条件違反0
+再現 #1: ?song=bunbun → パス82%・右手ミ/左手ソ
+         URLパラメータ無しで開き直し → パス76%・左手ソ/右脇ミ（通知なし・セレクタは bunbun のまま）</pre>
+  <p class="small">記録: PROJECT_NOTES.md（このレビューの根拠となる実測の履歴）／ 本ファイルはローカル確認用。公開・外部共有はしない。</p>
+</main>
+</body>
+</html>

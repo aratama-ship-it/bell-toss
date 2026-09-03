@@ -1829,16 +1829,27 @@
     }
     const saved = TOREI.songfile.load();
     if (saved && !TOREI.songfile.validate(saved)) {
-      applySongData(saved);
-      // 復元した中身が元の曲と違うなら、曲セレクタは「白紙」に戻す。
-      // 同じ曲名が選ばれたままだと、それを選び直しても change イベントが出ず
-      // 元の曲に戻せない（セレクタの表示が嘘になる）。
+      // 保存データが元のプリセットと中身が同じなら、編集されていない＝ただの再訪問。
+      // その場合は applySongData を通さず loadPreset に流す（2026-08-26 レビュー #1）。
+      // applySongData は焼き付け(FROZEN)や確定seedを適用しないため、通しただけで
+      // 「完成版のまま」だったはずの曲がその場で200シード探索され直し、
+      // パス率や開始時の構えが黙って変わる事故が起きていた
+      // （実測: bunbun パス82%→76%、右手ミ/左手ソ→左手ソ/右脇ミ、通知なし）。
       const src = TOREI.PRESETS.find(p => p.id === saved.id);
       const edited = !src || src.bpm !== saved.bpm ||
         src.notes.length !== saved.notes.length ||
         src.notes.some((n, i) => n.beat !== saved.notes[i].beat || n.midi !== saved.notes[i].midi);
-      if (edited) $("sel-preset").value = "blank";
-      showNotice(edited && src
+      if (!edited && src) {
+        sel.value = src.id;
+        loadPreset(src.id);
+        return;
+      }
+      applySongData(saved);
+      // 復元した中身が元の曲と違うなら、曲セレクタは「白紙」に戻す。
+      // 同じ曲名が選ばれたままだと、それを選び直しても change イベントが出ず
+      // 元の曲に戻せない（セレクタの表示が嘘になる）。
+      $("sel-preset").value = "blank";
+      showNotice(src
         ? `前回の続き（「${src.name}」を編集したもの）を復元しました。曲を選び直すと破棄されます`
         : "前回の続きを復元しました。曲を選び直すと破棄されます");
     } else {

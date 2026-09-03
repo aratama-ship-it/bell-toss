@@ -256,7 +256,12 @@ TOREI.schedule = function (melody, cfg) {
     const r = TOREI._scheduleOnce(melody, cfg, seed);
     const m = TOREI.scoreResult(r, chordSpots, cfg);
     if (m.score < bestScore) { bestScore = m.score; best = r; }
+    // ★人間の指定（ロック含む）を守れなかった編成では打ち切らない（2026-08-26 レビュー #2）。
+    // fixDrops は採点で×50と重く罰しているが、打ち切りがそれより先に効くと、
+    // ロックを破った最初の「十分良いシード」でそのまま止まってしまい、
+    // ロックの信頼性が「たまたま最初の候補が守っていたか」という運に依存していた。
     if (m.fails === 0 && m.shakes === 0 && m.chordMiss === 0 && m.openPass
+        && (r.fixDrops || 0) === 0
         && (m.passRate === 1 || m.passRate >= goodEnough)) break;
   }
   return best;
