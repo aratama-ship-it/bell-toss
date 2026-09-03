@@ -94,3 +94,6 @@ for (const song of songs) {
   console.log(`${n===0?"ok":"NG"} ${song.id.padEnd(14)} ${SEEDS}シードで違反 ${n}件`);
 }
 console.log(total === 0 ? `\n対象すべてが ${SEEDS} シードで不変条件を満たす` : `\n違反 合計 ${total}件`);
+// tools/verify.mjs（デプロイ前の一括検査）が拾えるよう、違反があれば非0で終了
+// （2026-08-26 レビュー #4。従来は出力を人が目視するだけだった）
+if (total > 0) process.exit(1);

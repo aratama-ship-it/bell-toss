@@ -237,6 +237,9 @@ function printSummary(rows) {
               `（うち1手の保持キャッチ和音 ${tot.hits}箇所）` +
               ` ／ 鳴らない ${tot.spots - tot.sounds}箇所 ／ 振り ${tot.shakes} ／ 不可能 ${tot.fails}`);
   console.log("");
+  // tools/verify.mjs（デプロイ前の一括検査）が使う合否。不可能音があるか、
+  // 書いた和音のどれかが鳴らないかのどちらかで不合格（2026-08-26 レビュー #4）
+  return { ok: tot.fails === 0 && tot.sounds === tot.spots };
 }
 
 function printDetail(r, TOREI) {
@@ -323,7 +326,10 @@ function main() {
     else printDetail(analyze(song, TOREI), TOREI);
     return;
   }
-  printSummary(songs.map(s => analyze(s, TOREI)));
+  const { ok } = printSummary(songs.map(s => analyze(s, TOREI)));
+  // 曲を指定しない全曲サマリのときだけ合否で終了コードを返す（tools/verify.mjs 用）。
+  // 1曲指定・--seeds・--file は調査目的で使われるので、そちらは従来どおり常に0で終わる
+  if (!ok) process.exit(1);
 }
 
 main();
