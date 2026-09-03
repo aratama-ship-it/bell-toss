@@ -66,8 +66,15 @@ function withFixes(song) {
 
 function runCase(song, seed, notes) {
   const melody = { bpm: song.bpm, beatsPerBar: song.beatsPerBar, notes };
-  const r = TOREI._scheduleOnce(melody, cfgFor(song), seed);
-  return sha(JSON.stringify(r));
+  const cfg = cfgFor(song);
+  const r = TOREI._scheduleOnce(melody, cfg, seed);
+  // scoreResult も一緒にハッシュする（2026-09-04 レビュー#6）。_scheduleOnce の結果だけでは
+  // 採点（TOREI.scoreResult）の回帰は検出できない——schedule()/optimize.mjs はこの関数で
+  // シードを選ぶが、golden.mjs はここまで直接 _scheduleOnce を呼んで scoreResult を経由しない
+  // ため、重みの集約などscoreResult自体の変更を確かめる安全網が別途要る。
+  const chordSpots = TOREI.countChordSpots(melody);
+  const score = TOREI.scoreResult(r, chordSpots, cfg);
+  return sha(JSON.stringify({ r, score }));
 }
 
 const cases = {};

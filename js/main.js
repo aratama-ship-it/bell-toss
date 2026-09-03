@@ -96,7 +96,13 @@
       ? `編集中（${baseName}から離れています）<button type="button" id="status-revert">${baseName}に戻す</button>`
       : "編集中";
     const btn = document.getElementById("status-revert");
-    if (btn) btn.addEventListener("click", () => loadPreset(loadedSongId));
+    // 「この曲の編集を破棄して戻す」（2026-09-04 レビュー#8）。この曲の自動保存も
+    // 即座に消す——次の自動保存（400ms後）を待たずに済ませておくと、その間にタブを
+    // 閉じても編集済みのデータが残らない
+    if (btn) btn.addEventListener("click", () => {
+      TOREI.songfile.clear(loadedSongId);
+      loadPreset(loadedSongId);
+    });
   }
 
   function recompute() {
@@ -1567,6 +1573,15 @@
   /* ---------- 曲データの保存・復元 ---------- */
 
   function applySongData(data) {
+    // 状態バッジ・「戻す」ボタンの復帰先（2026-09-04）。data.id が既知の曲なら、
+    // 編集途中を復元した後もそこへ戻れるようにする（未知/白紙ならバッジ自体を出さない）
+    loadedSongId = TOREI.PRESETS.some(p => p.id === data.id) ? data.id : null;
+    // ★直前に別の曲を開いていた場合、frozenSeed/frozenResult/seedSigがその曲のまま
+    // 残っている（2026-09-04発見。曲切替の途中でapplySongDataを呼ぶopenSongを
+    // 導入したことで初めて表面化する類のズレ）。ここで読み込むのは常に「公式の
+    // 焼き付け/確定seedそのものではない」データ（編集途中の復元、またはファイル読み込み）
+    // なので、古い曲の凍結状態を必ず外す
+    freezeSeed(null, null);
     state.melody = {
       bpm: data.bpm,
       beatsPerBar: data.beatsPerBar,
@@ -1601,6 +1616,56 @@
     setLoop(null);
     recompute();
     scrollToSongHead();
+  }
+
+  // saved（自動保存されたデータ）が、元のプリセット src と中身まで同じかどうか。
+  // 同じなら「ただの再訪問」、違えば「本当に編集された」。serializeが持つ全項目を見る。
+  // ★以前はbeat/midiしか比べておらず、投げの受け手・高さの指定（note.fix）だけを
+  // 変えた編集（編集卓での組み直し。実際にクライアントが使う操作そのもの）を
+  // 「編集されていない」と誤判定していた（2026-09-04発見）。fix比較が漏れていたため、
+  // openSongで曲を切り替えて戻ると、その fix 編集が静かに消えていた
+  // （実測: 高さ指定→ぶんぶんぶんを見る→第九へ戻る、で指定が消えることを再現・特定）。
+  function draftDiffersFromSrc(src, saved) {
+    if (!src) return true;
+    if (src.bpm !== saved.bpm || (src.beatsPerBar || 4) !== saved.beatsPerBar) return true;
+    if ((src.performers || 3) !== saved.performers) return true;
+    if ((src.passMode || "more") !== saved.passMode) return true;
+    if ((src.standTime || 2.0) !== saved.standTime) return true;
+    if ((src.flight || 1.2) !== saved.flight) return true;
+    if ((src.wakiCap ?? 1) !== saved.wakiCap) return true;
+    if ((src.maxDup ?? 2) !== saved.maxDup) return true;
+    if ((src.maxRings || null) !== (saved.maxRings || null)) return true;
+    if ((src.allowShake ?? true) !== saved.allowShake) return true;
+    if (src.notes.length !== saved.notes.length) return true;
+    for (let i = 0; i < src.notes.length; i++) {
+      const a = src.notes[i], b = saved.notes[i];
+      if (a.beat !== b.beat || a.midi !== b.midi) return true;
+      if (JSON.stringify(a.fix || null) !== JSON.stringify(b.fix || null)) return true;
+    }
+    return false;
+  }
+
+  // 曲IDを開く。保存された編集途中のデータ（torei.work.<id>）があり、かつ元の曲データと
+  // 中身が違う（＝本当に編集された）なら復元する。無い／未編集（ただの再訪問）なら
+  // 通常どおり読み込む（焼き付け・確定seedを使う公式パイプライン。2026-08-26 レビュー#1）。
+  // ★曲セレクタの切替（loadPreset直呼び）と起動時の復元の両方から使う（2026-09-04 レビュー#8）。
+  // 以前は曲を切り替えるたびに常にloadPresetだけが呼ばれ、保存は「起動時にしか読まれない」
+  // ため、「第九を編集→ぶんぶんぶんを確認→第九に戻る」の瞬間に第九の編集が消えていた
+  // （通知は出ても消える事実は変わらない、というレビュー指摘）。
+  function openSong(id) {
+    const saved = TOREI.songfile.load(id);
+    if (saved && !TOREI.songfile.validate(saved)) {
+      const src = TOREI.PRESETS.find(p => p.id === saved.id);
+      if (draftDiffersFromSrc(src, saved)) {
+        applySongData(saved);
+        // ★「選び直すと破棄されます」とは言わない（2026-09-04）: 曲ごとに保存が分かれた
+        // ので、他の曲を見てからこの曲に戻ってきても消えない。破棄したいときは
+        // 状態バッジの「〜に戻す」を使う（無ければ手で楽譜を戻す）
+        showNotice(src ? `「${src.name}」の編集途中を復元しました` : "編集途中を復元しました");
+        return;
+      }
+    }
+    loadPreset(id);
   }
 
   function downloadSongData() {
@@ -1727,6 +1792,7 @@
   }
 
   function init() {
+    TOREI.songfile.migrateLegacy();  // 旧・単一キーの作業中データを曲IDごとへ1回だけ移す（2026-09-04）
     setupStageRename();   // 舞台の名札をクリックで編集（2026-08-26）
     setupFixEditor();     // ダイヤグラム上で投げの受け手・高さを編集（2026-08-26）
     const sel = $("sel-preset");
@@ -1739,7 +1805,10 @@
       o.textContent = p.name;
       sel.appendChild(o);
     }
-    sel.addEventListener("change", () => loadPreset(sel.value));
+    // openSong: 切替先に編集途中の保存があれば復元し、無ければ通常どおり読み込む
+    // （2026-09-04 レビュー#8。以前はここが常にloadPresetで、切り替えるたびに
+    // その曲の編集途中が読まれずじまいだった）
+    sel.addEventListener("change", () => openSong(sel.value));
 
     TOREI.nav.init(state, {
       seek,
@@ -1789,12 +1858,14 @@
     $("btn-loop-clear").addEventListener("click", () => setLoop(null));
     // 難易度の重み付け（2026-08-25 本人要望）。
     // 物理的に成立していても人に無理な編成はある。ここは「重み」ではなく
-    // 手の余裕・高さの上限といった稽古で使える言葉で持つ（scheduler.js の TOREI.EFFORT）。
-    const effortInputs = [
-      ["eff-gap", "handGap"], ["eff-level", "maxLevel"], ["eff-even", "evenLevel"],
-      ["eff-load", "evenLoad"], ["eff-far", "farPass"], ["eff-arm", "wakiArm"],
-      ["eff-ring", "ringCost"],
-    ];
+    // 手の余裕・高さの上限といった稽古で使える言葉で持つ。
+    // ★どの項目が「無理のなさ」パネルの対象かは scheduler.js の TOREI.WEIGHTS が正本
+    // （2026-09-04 レビュー#6）。editable な項目の domId をここで読むだけにして、
+    // 表に項目を足したときJS側の読み書きが自動で追随するようにする
+    // （HTMLの<select>と選択肢の日本語ラベルは、意味のある文言を選ぶ人の作業として残す）。
+    const effortInputs = Object.keys(TOREI.WEIGHTS)
+      .filter(k => TOREI.WEIGHTS[k].editable)
+      .map(k => [TOREI.WEIGHTS[k].domId, k]);
     function readEffort() {
       const e = {};
       for (const [id, key] of effortInputs) e[key] = +$(id).value;
@@ -1940,7 +2011,10 @@
       loadPreset(wanted);
       return;
     }
-    const saved = TOREI.songfile.load();
+    // 自動保存は曲IDごとに分かれている（2026-09-04 レビュー#8）ので、素の再訪問では
+    // まず「最後に触っていた曲」のIDを引いてから、そのIDの保存を読む
+    const lastId = TOREI.songfile.loadLastId();
+    const saved = lastId ? TOREI.songfile.load(lastId) : null;
     if (saved && !TOREI.songfile.validate(saved)) {
       // 保存データが元のプリセットと中身が同じなら、編集されていない＝ただの再訪問。
       // その場合は applySongData を通さず loadPreset に流す（2026-08-26 レビュー #1）。
@@ -1949,22 +2023,21 @@
       // パス率や開始時の構えが黙って変わる事故が起きていた
       // （実測: bunbun パス82%→76%、右手ミ/左手ソ→左手ソ/右脇ミ、通知なし）。
       const src = TOREI.PRESETS.find(p => p.id === saved.id);
-      const edited = !src || src.bpm !== saved.bpm ||
-        src.notes.length !== saved.notes.length ||
-        src.notes.some((n, i) => n.beat !== saved.notes[i].beat || n.midi !== saved.notes[i].midi);
-      if (!edited && src) {
+      if (!draftDiffersFromSrc(src, saved) && src) {
         sel.value = src.id;
         loadPreset(src.id);
         return;
       }
       applySongData(saved);
-      // 復元した中身が元の曲と違うなら、曲セレクタは「白紙」に戻す。
-      // 同じ曲名が選ばれたままだと、それを選び直しても change イベントが出ず
-      // 元の曲に戻せない（セレクタの表示が嘘になる）。
-      $("sel-preset").value = "blank";
+      // ★曲セレクタを「白紙」に強制しない（2026-09-04。以前はここで強制していた）。
+      // 当時の理由は「同じ曲名が選ばれたままだと選び直してもchangeイベントが出ず、
+      // 元の曲に戻せない」だったが、自動保存を曲IDごとに分けた今はセレクタの再選択が
+      // 編集を破棄しなくなった（openSongが同じ下書きをもう一度復元するだけ）ので、
+      // このハックは不要かつ「今どの曲を見ているか」を隠す分だけ有害になった。
+      // applySongDataが素直に data.id をセレクタへ反映するのでそのまま使う
       showNotice(src
-        ? `前回の続き（「${src.name}」を編集したもの）を復元しました。曲を選び直すと破棄されます`
-        : "前回の続きを復元しました。曲を選び直すと破棄されます");
+        ? `前回の続き（「${src.name}」を編集したもの）を復元しました`
+        : "前回の続きを復元しました");
     } else {
       loadPreset("saints");
     }

@@ -1,8 +1,17 @@
-/* 投鈴 — 作業中の曲データの保存・復元 */
+/* 投鈴 — 作業中の曲データの保存・復元
+   ★保存先は曲IDごとに分ける（2026-09-04 レビュー#8）。以前は torei.work という
+   単一キーで、曲を切り替えるたびに上書きしていた。クライアントが「第九を組み直し→
+   ぶんぶんぶんを確認→第九に戻る」と操作した瞬間に、第九の編集が黙って消えていた
+   （通知は出るが消える事実は変わらない、というレビュー指摘）。 */
 "use strict";
 
 TOREI.songfile = (() => {
-  const KEY = "torei.work";
+  const PREFIX = "torei.work.";
+  // 曲を跨いだ「最後にどの曲を触っていたか」。?song= が無い素の再訪問で、
+  // どの曲IDの保存を探せばいいか分からないと復元できないため
+  const LAST_KEY = "torei.work.lastId";
+  const LEGACY_KEY = "torei.work"; // 旧・単一キー（移行元）
+  const keyFor = (id) => PREFIX + (id || "blank");
 
   function serialize(state, songId, songName) {
     return {
@@ -67,20 +76,50 @@ TOREI.songfile = (() => {
     return null;
   }
 
+  // obj.id（serializeが必ず入れる。"blank"含む）でキーを決める。
+  // 曲を跨いでも他の曲の保存を上書きしない。あわせて「最後の曲」も更新する
   function save(obj) {
-    try { localStorage.setItem(KEY, JSON.stringify(obj)); } catch (e) {}
+    try {
+      localStorage.setItem(keyFor(obj.id), JSON.stringify(obj));
+      localStorage.setItem(LAST_KEY, obj.id || "blank");
+    } catch (e) {}
   }
 
-  function load() {
+  function load(id) {
     try {
-      const text = localStorage.getItem(KEY);
+      const text = localStorage.getItem(keyFor(id));
       return text == null ? null : JSON.parse(text);
     } catch (e) { return null; }
   }
 
-  function clear() {
-    try { localStorage.removeItem(KEY); } catch (e) {}
+  // 最後に保存された曲のIDを返す（?song= が無い素の再訪問で使う）
+  function loadLastId() {
+    try { return localStorage.getItem(LAST_KEY); } catch (e) { return null; }
   }
 
-  return { serialize, validate, save, load, clear };
+  function clear(id) {
+    try { localStorage.removeItem(keyFor(id)); } catch (e) {}
+  }
+
+  // 旧・単一キー（torei.work）に残っている作業中データを、曲IDごとの新しいキーへ
+  // 1回だけ移す。新しいキーに既にデータがあれば上書きしない（何か既に保存済みなら
+  // 古いデータを優先させる理由が無い）。init() の先頭で1回だけ呼ぶ
+  function migrateLegacy() {
+    try {
+      const text = localStorage.getItem(LEGACY_KEY);
+      if (text == null) return;
+      const data = JSON.parse(text);
+      const id = (data && data.id) || "blank";
+      if (localStorage.getItem(keyFor(id)) == null) {
+        localStorage.setItem(keyFor(id), text);
+        // ★lastIdが既にあるなら上書きしない（2026-09-04発見・実機で再現）。
+        // 旧キーは定義上いちばん古いデータ。新方式で既に何か触っていれば
+        // そちらのほうが新しく、移行のためにそれを巻き戻してはいけない
+        if (localStorage.getItem(LAST_KEY) == null) localStorage.setItem(LAST_KEY, id);
+      }
+      localStorage.removeItem(LEGACY_KEY);
+    } catch (e) {}
+  }
+
+  return { serialize, validate, save, load, loadLastId, clear, migrateLegacy };
 })();

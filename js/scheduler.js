@@ -65,27 +65,102 @@ TOREI.SCHED = {
 
    ここは「重み」ではなく物理的に意味の分かる言葉で持つ。稽古で「手の余裕を0.8秒に」とは
    言えても「窮屈さの重みを0.15に」とは言えないため。 */
-TOREI.EFFORT = {
-  handGap: 0.6,      // 同じ手の動作間隔として確保したい秒数。これを下回るぶんだけ減点
-  gapCost: 0.15,     // 窮屈な動作1回あたりの減点
-  maxLevel: 5,       // 許容する投げの高さの段（1〜5）。5＝制限なし
-  levelCost: 0.5,    // 上限を超えた投げ1本あたりの減点
-  evenLevel: 0.2,    // 同じ手で高さの段が変わる1回あたりの減点（0で気にしない）
-  evenLoad: 3.0,     // 演者間の偏り（0〜1）にかける減点
-  farPass: 0.05,     // 隣でない演者へのパス1回あたりの減点
-  ringCost: 0.1,     // リング1本あたりの減点（本数を絞りたいほど上げる）
+/* 採点の重みを1つの表に集約（2026-09-04 レビュー#6）。以前はここ（TOREI.EFFORT）と
+   scoreResult の本体（fails*1000, PASS_SWEET=0.70 など）に分かれていて、「どの重みが
+   何を動かすか」の一覧が無く、次に重みを足すときに衝突（例: 高さを揃える vs バリエーション）
+   を見落としやすかった。scoreResult はこの表（TOREI.weightsDefault()）だけを参照する。
+
+   editable:true の7項目だけが「無理のなさ」パネル（UI）で調整できる。main.js の
+   effortInputs はこの表の editable な項目から domId を読んで生成するので、
+   ここに項目を足しても main.js 側の読み書きは自動で追随する（ただしHTML側の
+   <select> と選択肢の日本語ラベルは、意味のある文言を選ぶ人の作業として残す）。
+   editable:false は成立・破綻の重大度やパス率の形など、曲ごとに変える理由が薄い
+   採点方式そのものの定数（無理のなさの概念には入らない）。 */
+TOREI.WEIGHTS = {
+  // ---- 無理のなさ（UIで調整可。旧 TOREI.EFFORT）----
+  handGap:  { default: 0.6,  unit: "秒",    editable: true, domId: "eff-gap",
+    desc: "同じ手の動作間隔として確保したい秒数。これを下回るぶんだけ減点", since: "2026-08-25" },
+  maxLevel: { default: 5,    unit: "段",    editable: true, domId: "eff-level",
+    desc: "許容する投げの高さの段（1〜5）。5＝制限なし", since: "2026-08-25" },
+  evenLevel:{ default: 0.2,  unit: "回あたり", editable: true, domId: "eff-even",
+    desc: "同じ手で高さの段が変わる1回あたりの減点（0で気にしない）", since: "2026-08-25" },
+  evenLoad: { default: 3.0,  unit: "比あたり", editable: true, domId: "eff-load",
+    desc: "演者間の偏り（0〜1）にかける減点", since: "2026-08-25" },
+  farPass:  { default: 0.05, unit: "回あたり", editable: true, domId: "eff-far",
+    desc: "隣でない演者へのパス1回あたりの減点", since: "2026-08-25" },
   // 脇を使っている側の腕でキャッチ／取り出しをした1回あたりの減点。
   // 0.1が釣り合いの良い点（実測: 0で390回・0.1で301回とパス率を落とさず減り、
   // 0.3以上にすると回数は減るがパス率が1〜2pt落ちる）。
-  wakiArm: 0.1,
-  selfRun: 0.4,      // 自分投げの連続への累進減点（3連続から。順番にパスが混ざる編成を好む）
+  wakiArm:  { default: 0.1,  unit: "回あたり", editable: true, domId: "eff-arm",
+    desc: "脇側の腕でキャッチ／取り出しをした1回あたりの減点", since: "2026-08-25" },
+  ringCost: { default: 0.1,  unit: "本あたり", editable: true, domId: "eff-ring",
+    desc: "リング1本あたりの減点（本数を絞りたいほど上げる）", since: "2026-08-25" },
+  // ---- 無理のなさの内部係数（UI非公開。上の7項目の効き方を決める）----
+  gapCost:  { default: 0.15, unit: "回あたり", editable: false,
+    desc: "窮屈な動作1回あたりの減点", since: "2026-08-25" },
+  levelCost:{ default: 0.5,  unit: "本あたり", editable: false,
+    desc: "高さ上限を超えた投げ1本あたりの減点", since: "2026-08-25" },
+  // 自分投げの連続への累進減点（3連続から。順番にパスが混ざる編成を好む）
+  selfRun:  { default: 0.4,  unit: "累進",    editable: false,
+    desc: "自分投げの連続への累進減点（3連続から）", since: "2026-08-26" },
   // 投げの高さのバリエーション（2026-08-26 本人方針「たくさんあるほどよし。全体的には低く、
   // 定期的に高く投げるバリエーションがあると見栄えがとても良い。とても強い重みで」）
-  varietyLevel: 0.6, // 使われた高さの段の種類1つ増えるごとの加点
+  varietyLevel:{ default: 0.6, unit: "種類あたり", editable: false,
+    desc: "使われた高さの段の種類1つ増えるごとの加点", since: "2026-08-26" },
   // 高い投げ（高さ4以上）が曲の四分区間それぞれに現れるごとの加点。
   // 「とても強い重みで」（本人）。実測: 2.5未満だと散らばり2区間の解が3区間の解に勝つ
-  varietyHigh: 3.0,
+  varietyHigh:{ default: 3.0, unit: "区間あたり", editable: false,
+    desc: "高い投げが曲の四分区間それぞれに現れるごとの加点", since: "2026-08-26" },
+  // ---- 成立・破綻の重大度（UI非公開）----
+  failCost:    { default: 1000, unit: "音あたり", editable: false,
+    desc: "どの演者も間に合わない音1つあたりの減点", since: "2026-08-21" },
+  fixDropCost: { default: 50,   unit: "回あたり", editable: false,
+    desc: "人間の指定（ロック含む）を守れず緩めた回数の減点", since: "2026-08-26" },
+  shakeCost:   { default: 10,   unit: "回あたり", editable: false,
+    desc: "救済の振り（投げ損ない・フレーズ末限定）1回あたりの減点", since: "2026-08-21" },
+  repShakeCost:{ default: 2,    unit: "回あたり", editable: false,
+    desc: "連打の振り（意図した技法）1回あたりの減点", since: "2026-08-26" },
+  chordMissCost:{ default: 3,   unit: "箇所あたり", editable: false,
+    desc: "和音が保持キャッチで鳴らなかった箇所の減点", since: "2026-08-22" },
+  // ---- パス率の形（UI非公開）----
+  // パス率の報酬はpassSweetで頭打ち、passHigh超はむしろ抑える（2026-08-26 本人方針
+  // 「多くて良いが80%を超える必要はない。できれば70%くらいに抑えたい」）
+  passSweet:    { default: 0.70, unit: "率", editable: false,
+    desc: "パス率の報酬がここで頭打ちになる", since: "2026-08-26" },
+  passHigh:     { default: 0.80, unit: "率", editable: false,
+    desc: "これを超えるとむしろ抑える", since: "2026-08-26" },
+  passBonusMax: { default: 8,    unit: "係数", editable: false,
+    desc: "頭打ちまでのパス率ボーナス係数", since: "2026-08-26" },
+  passOverCost: { default: 6,    unit: "係数", editable: false,
+    desc: "80%超え分を削る係数", since: "2026-08-26" },
+  // パス率20%は本人が定めた下限（2026-08-25）
+  passFloorMin: { default: 0.20, unit: "率", editable: false,
+    desc: "パス率がこれを下回ると強く減点し始める", since: "2026-08-25" },
+  passFloorCost:{ default: 100,  unit: "係数", editable: false,
+    desc: "下限割れ分にかける係数", since: "2026-08-25" },
+  // ---- 所作・冒頭（UI非公開）----
+  handoffCost: { default: 0.5, unit: "回あたり", editable: false,
+    desc: "逆の手への無駄な持ち替え1回あたりの減点", since: "2026-08-25" },
+  prepWakiCost:{ default: 0.4, unit: "回あたり", editable: false,
+    desc: "開演前の無駄な脇挟み1回あたりの減点", since: "2026-08-25" },
+  // 冒頭は最も目を引くので、演者間の受け渡しで始めたい（2026-08-25／26 本人方針）
+  openMissCost:{ default: 1.0, unit: "音あたり", editable: false,
+    desc: "冒頭2音のうちパスでない音1つあたりの減点", since: "2026-08-25" },
 };
+
+// 表の既定値だけを平坦な {key: 数値} にする。scoreResultはこれに cfg.effort を重ねて使う
+TOREI.weightsDefault = function () {
+  const d = {};
+  for (const k of Object.keys(TOREI.WEIGHTS)) d[k] = TOREI.WEIGHTS[k].default;
+  return d;
+};
+
+// 後方互換: 「無理のなさ」の7項目だけの旧EFFORT形（effortMetricsが参照。値の実体はWEIGHTS）
+TOREI.EFFORT = (() => {
+  const e = {};
+  for (const k of Object.keys(TOREI.WEIGHTS)) if (TOREI.WEIGHTS[k].editable) e[k] = TOREI.WEIGHTS[k].default;
+  return e;
+})();
 
 /* 上の指標を実測する。ブラウザの採点・最適化ツール・点検ツールが同じ数値を見るよう1か所に置く */
 TOREI.effortMetrics = function (r, cfg) {
@@ -141,6 +216,12 @@ TOREI.effortMetrics = function (r, cfg) {
    両方がこの関数を使う。別々に持つと必ず食い違い、「ツールが選んだ最良」と
    「画面に出る編成」がズレるため。 */
 TOREI.scoreResult = function (r, chordSpots, cfg) {
+  // ★重みはここ1箇所だけから読む（2026-09-04 レビュー#6）。cfg.effort は
+  // 「無理のなさ」パネルの7項目だけを上書きしうる（main.jsのreadEffort）。
+  // 他の項目にcfg.effortが値を持つことは今は無いが、Object.assignなので将来
+  // スライダーを増やしてもここは変更不要
+  const W = Object.assign({}, TOREI.weightsDefault(), cfg.effort || {});
+
   const fails = r.noteResults.filter(x => x && x.kind === "fail").length;
   // 振りは2種類。救済振り（投げ損ない・フレーズ末限定）は重く、連打振り（意図した技法）は
   // 軽く。ただし0にはしない: 投げられる連打（複製リングで交互に投げる）が可能なら
@@ -150,17 +231,16 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   const throws = r.actions.filter(a => a.type === "throw");
   const passes = throws.filter(a => a.pass).length;
   const passRate = throws.length ? passes / throws.length : 0;
-  // パス率の報酬は70%で頭打ち、80%超はむしろ抑える（2026-08-26 本人方針
+  // パス率の報酬は W.passSweet で頭打ち、W.passHigh 超はむしろ抑える（2026-08-26 本人方針
   // 「多くて良いが80%を超える必要はない。できれば70%くらいに抑えたい」）。
   // 従来の一直線な報酬（rate×8）だと高いほど常に得で、90%台の編成が選ばれ続けた。
-  const PASS_SWEET = 0.70, PASS_HIGH = 0.80;
   const passBonus = cfg.passMode === "off" ? 0
-    : Math.min(passRate, PASS_SWEET) * 8
-      - Math.max(0, passRate - PASS_HIGH) * 6;
-  // パス率20%は本人が定めた下限（2026-08-25）。比例ボーナスだけだと、
+    : Math.min(passRate, W.passSweet) * W.passBonusMax
+      - Math.max(0, passRate - W.passHigh) * W.passOverCost;
+  // パス率の下限（2026-08-25 本人指定）。比例ボーナスだけだと、
   // 所作やリング数の小さな得と引き換えに下限を割る編成が選ばれうる。
   const passFloor = (cfg.passMode === "off" || !throws.length) ? 0
-    : Math.max(0, 0.20 - passRate) * 100;
+    : Math.max(0, W.passFloorMin - passRate) * W.passFloorCost;
   const chordMiss = chordSpots - r.actions.filter(a => a.chordRole === "held").length;
   // 無駄な所作（2026-08-25 本人指摘）。持ち替えと開演前の脇は音楽的に何も生まない。
   // 曲中の脇は減点しない——3本以上を持つ演者には正当な技法で、減点するとパス率を大きく削る
@@ -168,19 +248,18 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   // 脇側の手へ渡すのはキャッチする腕を空けるための正しい手順なので、無駄には数えない
   const handoffs = r.actions.filter(a => a.type === "store" && a.to === "otherhand" && !a.toParked).length;
   const prepWaki = r.actions.filter(a => a.prep && a.type === "store" && a.to === "waki").length;
-  const fuss = handoffs * 0.5 + prepWaki * 0.4;
+  const fuss = handoffs * W.handoffCost + prepWaki * W.prepWakiCost;
   // 自分投げの連続を避ける（2026-08-26 本人方針「自分へのパスが3連続・4連続と増えるほど
   // 避けたい。自分へのパスと他人へのパスがいい感じに順番にやってくるのが正しい」）。
   // 曲の時間順に投げを並べ、演者間パスを1本も挟まない連続（run）の長さで累進的に減点。
-  // 2連続までは無料、3連続 0.8、4連続 2.4、5連続 4.8 …（(len-2)×(len-1)×0.4）。
-  const E0 = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
+  // 2連続までは無料、3連続 0.8、4連続 2.4、5連続 4.8 …（(len-2)×(len-1)×W.selfRun）。
   let selfRunCost = 0, maxSelfRun = 0;
   if (cfg.passMode !== "off") {
     const seq = throws.slice().sort((a, b) => a.t - b.t);
     let run = 0;
     const closeRun = () => {
       if (run > maxSelfRun) maxSelfRun = run;
-      if (run >= 3) selfRunCost += (run - 2) * (run - 1) * (E0.selfRun != null ? E0.selfRun : 0.4);
+      if (run >= 3) selfRunCost += (run - 2) * (run - 1) * W.selfRun;
       run = 0;
     };
     for (const th of seq) { if (th.pass) closeRun(); else run++; }
@@ -193,16 +272,15 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
   if (cfg.passMode !== "off") {
     for (const idx of [0, 1]) {
       const c0 = r.actions.find(a => a.type === "catch" && a.noteIdx === idx);
-      if (c0 && !c0.pass) openMiss += 1.0;
+      if (c0 && !c0.pass) openMiss += W.openMissCost;
     }
   }
   // 人間に無理がないか（2026-08-25 本人要望）。物理的な成立とは別の軸なので、
   // 破綻・振り・和音より弱く、パス率と competing する程度の重みに置く。
-  const E = Object.assign({}, TOREI.EFFORT, cfg.effort || {});
   const em = TOREI.effortMetrics(r, cfg);
-  const effort = em.tight * E.gapCost + em.tooHigh * E.levelCost
-    + em.levelChange * E.evenLevel + em.imbalance * E.evenLoad + em.farPasses * E.farPass
-    + em.armCatches * E.wakiArm;
+  const effort = em.tight * W.gapCost + em.tooHigh * W.levelCost
+    + em.levelChange * W.evenLevel + em.imbalance * W.evenLoad + em.farPasses * W.farPass
+    + em.armCatches * W.wakiArm;
   // 投げの高さのバリエーション（2026-08-26 本人方針）。段の種類の多さと、
   // 高い投げ（高さ4以上）が曲全体に「定期的に」散らばっていることを強く加点する。
   // 散らばりは曲を四分割して「高い投げを含む区間の数」で測る（数だけだと一箇所に固まる）。
@@ -214,10 +292,11 @@ TOREI.scoreResult = function (r, chordSpots, cfg) {
     const t1 = Math.max(...throws.map(a => a.t)) + 0.001;
     const covered = new Set(throws.filter((a, i) => lv[i] >= 4)
       .map(a => Math.min(3, Math.floor((a.t - t0) / (t1 - t0) * 4)))).size;
-    varietyBonus = (distinct - 1) * E.varietyLevel + covered * E.varietyHigh;
+    varietyBonus = (distinct - 1) * W.varietyLevel + covered * W.varietyHigh;
   }
   return {
-    score: fails * 1000 + (r.fixDrops || 0) * 50 + shakes * 10 + repShakes * 2 + chordMiss * 3 + r.rings.length * E.ringCost
+    score: fails * W.failCost + (r.fixDrops || 0) * W.fixDropCost + shakes * W.shakeCost
+      + repShakes * W.repShakeCost + chordMiss * W.chordMissCost + r.rings.length * W.ringCost
       + fuss + passFloor + openMiss + effort + selfRunCost - passBonus - varietyBonus,
     fails, shakes, repShakes, chordMiss, passRate, rings: r.rings.length,
     handoffs, prepWaki, openPass: openMiss === 0, effort, em,
