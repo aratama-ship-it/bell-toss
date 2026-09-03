@@ -47,6 +47,7 @@
   // 「編集した箇所を直す」のを忘れる事故が起きないよう、個々の編集操作に手を入れるのではなく
   // 署名を突き合わせて自動で外す（編集の入口はドラッグ・キー・小節操作・MIDI読込と多い）。
   let seedSig = null, frozenSeed = null, frozenResult = null;
+  let loadedSongId = null;   // 状態バッジの「戻す」ボタンが復帰する先（2026-08-26）
   function stateSig() {
     const c = state.cfg;
     return JSON.stringify([
@@ -65,6 +66,39 @@
     frozenResult = frozen || null;
   }
 
+  /* 状態バッジ（2026-08-26 レビュー起因: 完成版・確定seed・編集中の3状態が
+     金の四角と🔒だけでは見分けられず、自動保存の復元でも黙って変わる事故があった）。
+     曲名の隣に常時表示し、編集中は「戻す」で元の曲へ復帰できるようにする。 */
+  function renderStatusBadge(sigIntact) {
+    const el = $("status-badge");
+    if (!el || !loadedSongId) { if (el) el.className = ""; if (el) el.innerHTML = ""; return; }
+    if (sigIntact == null) sigIntact = seedSig != null && stateSig() === seedSig;
+    el.className = "";
+    if (frozenResult && sigIntact) {
+      el.classList.add("st-frozen");
+      const at = frozenResult.frozenAt ? `（${frozenResult.frozenAt} 凍結）` : "（凍結）";
+      el.innerHTML = `完成版${at}`;
+      return;
+    }
+    if (frozenSeed != null && sigIntact) {
+      el.classList.add("st-seeded");
+      el.textContent = "おまかせ（最適化済み）";
+      return;
+    }
+    // ここに来るのは「離れている」状態: 完成版/おまかせがあったのに編集で外れたか、
+    // そもそも白紙などseedを持たない曲。何から離れたかで文言を言い分ける
+    // （「おまかせ」しか無い曲で「完成版から離れています」と出るのは事実と違うため）
+    const isFrozenBase = TOREI.FROZEN && TOREI.FROZEN[loadedSongId];
+    const isSeededBase = TOREI.SEEDS && TOREI.SEEDS[loadedSongId] != null;
+    el.classList.add("st-editing");
+    const baseName = isFrozenBase ? "完成版" : isSeededBase ? "おまかせ" : null;
+    el.innerHTML = baseName
+      ? `編集中（${baseName}から離れています）<button type="button" id="status-revert">${baseName}に戻す</button>`
+      : "編集中";
+    const btn = document.getElementById("status-revert");
+    if (btn) btn.addEventListener("click", () => loadPreset(loadedSongId));
+  }
+
   function recompute() {
     stopPlayback();
     // 楽譜か設定が変わっている間だけ、確定編成を外して探索に切り替える。
@@ -72,6 +106,7 @@
     // 配布版と違う振り付けのまま、という分かりにくい状態になる）。
     const sigIntact = seedSig != null && stateSig() === seedSig;
     if (frozenSeed != null) state.cfg.seed = sigIntact ? frozenSeed : null;
+    renderStatusBadge(sigIntact);
     // 小節操作以外の編集が入ったら「取り消す」を無効化する。
     // 古いスナップショットで新しい編集ごと巻き戻す事故を防ぐため
     if (!inBarOp && typeof invalidateBarUndo === "function" && barSnapshot) invalidateBarUndo();
@@ -1540,6 +1575,7 @@
 
   function loadPreset(id) {
     const p = TOREI.PRESETS.find(x => x.id === id) || TOREI.PRESETS[0];
+    loadedSongId = p.id;
     state.melody = {
       bpm: p.bpm,
       beatsPerBar: p.beatsPerBar,

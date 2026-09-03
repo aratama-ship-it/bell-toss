@@ -130,6 +130,35 @@ main { padding: 0 32px 40px; max-width: 1280px; margin: 0 auto; }
 
 #transport .spacer { flex: 1; }
 
+/* 状態バッジ（2026-08-26 レビュー起因）: いま見ているのが完成版か、おまかせか、
+   完成版から離れた編集中かを常時表示する。金の四角や🔒だけでは伝わらず、
+   自動保存の復元でも状態が黙って変わりうるため、曲名の隣に常設する。 */
+#status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+#status-badge:empty { display: none; }
+#status-badge.st-frozen { background: rgba(169,130,47,0.14); color: var(--brass); border: 1px solid rgba(169,130,47,0.4); }
+#status-badge.st-seeded { background: rgba(61,122,90,0.12); color: #3d7a5a; border: 1px solid rgba(61,122,90,0.35); }
+#status-badge.st-editing { background: rgba(178,71,46,0.12); color: var(--warn); border: 1px solid rgba(178,71,46,0.4); }
+#status-badge button {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1.6;
+}
+#status-badge button:hover { background: rgba(0,0,0,0.06); }
+
 /* 二次操作（MIDI・行動表コピー・曲データ）。#transport の直接の子として
    gapによる間隔を保つため display:contents で自身は箱を作らない。
    デスクトップでは常時展開・トグルボタンは非表示（従来の見た目のまま）。 */

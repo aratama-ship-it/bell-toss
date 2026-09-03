@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=24">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-19</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-20</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -30,6 +30,7 @@
     <label>曲
       <select id="sel-preset"></select>
     </label>
+    <span id="status-badge"></span>
     <label>拍子
       <select id="sel-meter" aria-label="拍子" title="小節の区切り方。音符の位置は変わらず、小節線と小節番号の数え方が変わる">
         <option value="4">4/4</option>
@@ -268,6 +269,6 @@
 <script src="js/navigator.js?v=1"></script>
 <script src="js/timeline.js?v=6"></script>
 <script src="js/stage.js?v=11"></script>
-<script src="js/main.js?v=42"></script>
+<script src="js/main.js?v=44"></script>
 </body>
 </html>
