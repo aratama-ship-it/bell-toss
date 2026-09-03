@@ -2200,3 +2200,36 @@ check_held_catch.mjs は元々 exit 1 を返していたので変更なし。
 
 以後のデプロイ前は `node tools/verify.mjs` を実行する。将来 GitHub Actions に push フック
 として載せれば自動化できる（今回は未実装）。
+
+## 2026-08-26 作曲者の設定を折りたたみに分離 v2026.8.26-21
+
+レビュー（docs/review_2026-08-26.html）Aの修正。舞台の直下に演者数・滞空・脇の本数・
+スタンド持ち替え・パッシング・リング上限・振り・音ズレ補正＋「無理のなさ」6項目が
+常時並んでおり、演出家にはノイズだった。
+
+**#config（設定群）と #effort-panel（無理のなさ）を `<details id="composer-settings">`
+1つにまとめ、既定で折りたたむ。** 開くと「作曲者の設定（演者数・滞空・パッシングなど）」の
+1行から中身が展開される。effort-panelは内側でさらに独立した折りたたみとして残る
+（元の構造のまま入れ子にしただけ）。
+
+**実装中に見つけた事故**: `#config { display: flex }` がID指定のため、
+details折りたたみのUA既定ルール（`details:not([open]) > *:not(summary){display:none}`、
+詳細度0,1,2）より詳細度が高く（1,0,0）、**閉じていても表示され続けていた**。
+実機確認で `isOpenByDefault=false` なのに `configVisible="flex"` という食い違いを発見し、
+`#composer-settings:not([open]) > #config { display: none; }`（詳細度2,1,0）で明示的に
+上書きして直した。#effort-panelは自身のCSSに `display` を持たないため元々この問題が
+なかった（UAのdisplay:noneがそのまま効いていた）。
+
+**mobile flex order**: `#config { order: 7; }` を `#composer-settings { order: 7; }` に
+変更（#configはもう main の直接の子ではないため、直接の子だけに効く flex order は
+外枠に付け替える必要がある）。副次的に、従来 #effort-panel が直接の子で order 未指定
+（＝0）だったため stage-wrap（order:1）より先に来ていた不具合も直った。
+
+**実機確認**: 閉時 configVisible="none"、開時"flex"。演者数を4に変更→パス率が
+再計算されバッジが「編集中（完成版から離れています）」に切替→「完成版に戻す」で
+82%・演者3人に復元。モバイル幅（375px）でも「作曲者の設定」が正しくヒントの下に
+折りたたまれることを確認（stage-wrapより #start-layout 等が先に来る事象を別途発見したが、
+これは今回のcomposer-settings変更とは無関係の既存挙動——#start-layout等に
+flex orderが付いていないため。今回の変更範囲外として温存し、別途報告する）。
+
+verify.mjs 全項目通過（表示のみの変更のため当然だが、念のため実行）。

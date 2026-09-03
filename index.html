@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=24">
+<link rel="stylesheet" href="css/style.css?v=26">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-20</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-21</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -54,6 +54,11 @@
     </span>
   </section>
 
+  <!-- 作曲者向けの設定群（2026-08-26 レビュー A）。演者数・滞空・脇の本数・スタンド持ち替え・
+       パッシング・リング上限・振り・音ズレ補正・無理のなさは、振付を組む側の道具であって
+       演出家が触るものではない。既定は折りたたみ、開いたときだけ出す。 -->
+  <details id="composer-settings">
+    <summary>作曲者の設定（演者数・滞空・パッシングなど）</summary>
   <section id="config">
     <label>演者 <input type="number" id="inp-performers" min="1" max="5" value="3"> 人</label>
     <label>滞空時間 <input type="range" id="inp-flight" min="0.7" max="1.4" step="0.05" value="1.2">
@@ -129,6 +134,7 @@
         <i>用意する鈴の総数</i></label>
     </div>
     <p class="effort-note" id="effort-now"></p>
+  </details>
   </details>
 
   <div id="ring-summary"></div>

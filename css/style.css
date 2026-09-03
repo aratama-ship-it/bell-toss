@@ -296,6 +296,36 @@ input[type="range"] { accent-color: var(--brass); width: 120px; }
 }
 .sl-empty { font-size: 11px; color: var(--ink-soft); opacity: 0.7; }
 
+/* 作曲者向けの設定群（2026-08-26 レビュー A）。演者数・滞空・パッシングなどは
+   振付を組む側の道具で、演出家が見て組み直す画面にはノイズだった。既定は折りたたみ、
+   曲名の下に「何を設定できるか」だけが1行見える形にする（#effort-panelと同じ考え方）。 */
+#composer-settings {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f3efe6;
+  padding: 0;
+  margin: 0 0 10px;
+}
+#composer-settings > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  list-style: none;
+}
+#composer-settings > summary::-webkit-details-marker { display: none; }
+#composer-settings > summary::before { content: "▸ "; color: var(--brass); }
+#composer-settings[open] > summary::before { content: "▾ "; }
+#composer-settings > summary:hover { color: var(--ink); }
+#composer-settings > #config { padding: 4px 12px 12px; }
+#composer-settings > #effort-panel { margin: 0 12px 12px; }
+/* ★#config は `#config { display: flex }` をID指定で持つため、details折りたたみの
+   UA既定（details:not([open]) > *:not(summary){display:none}）より詳細度が高く、
+   閉じていても表示され続けてしまう。ID2つで明示的に上書きして正しく隠す
+   （実機確認で発見: isOpenByDefault=false なのに configVisible="flex" だった）。 */
+#composer-settings:not([open]) > #config { display: none; }
+
 /* 難易度の重み付け（2026-08-25 本人要望）。
    常時開いておくには項目が多く、かといって隠すと存在に気づけない。
    閉じた状態でも「何を設定できるか」が1行で分かる details にする。 */
@@ -772,7 +802,10 @@ footer {
   #notice       { order: 4; }
   #warnings     { order: 5; }
   #score-area   { order: 6; }
-  #config       { order: 7; }
+  /* #config と #effort-panel は composer-settings に包まれた（2026-08-26 レビューA）ので
+     その外枠に order を付ける。以前は #effort-panel が直接の子で order 未指定＝0だったため、
+     狭い画面では stage-wrap より先に来てしまっていた（この変更で副次的に直る） */
+  #composer-settings { order: 7; }
 
   /* 狭い画面では二次操作（MIDI・行動表コピー・曲データ）を畳んで、楽譜が見える
      量を優先する。「曲を保存」「曲を開く」の追加でこの必要性が上がった。 */
