@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>投鈴 — ハンドベル・ジャグリング シミュレーター</title>
-<link rel="stylesheet" href="css/style.css?v=26">
+<link rel="stylesheet" href="css/style.css?v=27">
 </head>
 <body>
 <header>
   <div class="title-block">
-    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-21</span></h1>
+    <h1>投鈴<span class="reading">とうれい</span><span id="app-version">v2026.8.26-22</span></h1>
   </div>
   <p class="subtitle">ハンドベル・ジャグリング 編成シミュレーター<br>
     <span class="note">メロディを置くと、演者が「いつ・どのリングを投げるか」を逆算します</span></p>
@@ -218,12 +218,12 @@
         <div class="es-status" id="es-status"></div>
       </div>
     </section>
-    <p class="hint">楽譜は<b>クリックで追加・ドラッグで移動・その場でクリックすると削除</b>。
+    <p class="hint"><span class="edit-only">楽譜は<b>クリックで追加・ドラッグで移動・その場でクリックすると削除</b>。
       行動表の<b>投げ（白抜き丸）をクリックすると下の編集卓で組み直せます</b>（金の四角＝編集済み）。
-      <button type="button" id="btn-clear-fixes" hidden>✎ 編集をすべて解除</button><br>
+      <button type="button" id="btn-clear-fixes" hidden>✎ 編集をすべて解除</button><br></span>
       下の段は自動計算された各演者の行動（音符から左へ伸びる線が「投げてから鳴るまで」の滞空）。<br>
-      小節番号の帯を<b>なぞると再生位置</b>、<b>option+ドラッグでループ範囲</b>。上の見取り図は<b>窓をつかんで移動・端を引いてズーム</b>。
-      Space＝再生/停止、←→＝16分移動（Shiftで1小節）。</p>
+      小節番号の帯を<b>なぞると再生位置</b>。<span class="edit-only"><b>option+ドラッグでループ範囲</b>。上の見取り図は<b>窓をつかんで移動・端を引いてズーム</b>。
+      Space＝再生/停止、←→＝16分移動（Shiftで1小節）。</span></p>
   </section>
 
   <section id="cuesheet">

@@ -794,18 +794,34 @@ footer {
 
   /* 稽古の現場（狭い画面）では、まずタイムラインが見えていること。
      編成の設定は一度決めたら触らないので楽譜の下へ回す。DOM順は変えない
-     （デスクトップは従来どおり 設定→楽譜 の並び）。 */
+     （デスクトップは従来どおり 設定→楽譜 の並び）。
+
+     ★main の直接の子には**全員**に order を振ること（2026-08-26）。
+     flex の order 既定値は 0 で、order:1 の #stage-wrap より小さい。
+     振り忘れた要素は画面の一番上へ飛ぶ。実際 #start-layout と #cuesheet が
+     振られておらず、狭い画面では舞台より前に出ていた。 */
   main { display: flex; flex-direction: column; }
   #stage-wrap   { order: 1; }
   #transport    { order: 2; }
   #ring-summary { order: 3; }
-  #notice       { order: 4; }
-  #warnings     { order: 5; }
-  #score-area   { order: 6; }
+  #start-layout { order: 4; }
+  #notice       { order: 5; }
+  #warnings     { order: 6; }
+  #score-area   { order: 7; }
+  #cuesheet     { order: 8; }
   /* #config と #effort-panel は composer-settings に包まれた（2026-08-26 レビューA）ので
      その外枠に order を付ける。以前は #effort-panel が直接の子で order 未指定＝0だったため、
      狭い画面では stage-wrap より先に来てしまっていた（この変更で副次的に直る） */
-  #composer-settings { order: 7; }
+  #composer-settings { order: 9; }
+
+  /* ★狭い画面は「見る専用」（2026-08-26 本人方針「編集は出来なくていい」）。
+     楽譜の編集・組み直しはドラッグとキーボードが前提で、指では扱えない。
+     編集専用のUIを畳んで、舞台・再生・持ち方・ダイヤグラム・Qシートに集中させる。
+     稽古で使う「この小節を反復」は残す（編集ではなく再生の道具なので）。 */
+  #edit-strip,
+  #btn-bar-insert, #btn-bar-delete, #btn-bar-undo, #btn-bar-lock,
+  #btn-clear,
+  .hint .edit-only { display: none; }
 
   /* 狭い画面では二次操作（MIDI・行動表コピー・曲データ）を畳んで、楽譜が見える
      量を優先する。「曲を保存」「曲を開く」の追加でこの必要性が上がった。 */
