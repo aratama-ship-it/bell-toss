@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投鈴 — 本番曲目の選び直し（2026-09-04）</title>
+<style>
+  :root {
+    --paper: #f6f3ec; --paper-deep: #ece7dc; --ink: #2c313a; --ink-soft: #6b6f77;
+    --line: #d8d2c4; --brass: #a9822f; --brass-soft: #c9a45a; --performer: #3d5578; --warn: #b2472e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 28px 60px; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "Hiragino Sans", sans-serif; line-height: 1.7;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 24px; }
+  .brief {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 28px; font-size: 13.5px;
+  }
+  .brief b { color: var(--brass); }
+  .brief ul { margin: 8px 0 0; padding-left: 20px; }
+  .brief li { margin: 3px 0; }
+  h2 { font-size: 16px; margin: 32px 0 6px; border-bottom: 2px solid var(--brass-soft); padding-bottom: 6px; }
+  .h2-note { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 12.5px; }
+  th { background: var(--paper-deep); text-align: left; padding: 8px 10px; font-weight: 600;
+    color: var(--ink-soft); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 7px 10px; border-bottom: 1px solid #efece3; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.hi { background: #fbf3df; }
+  td.rank { color: var(--ink-soft); width: 24px; }
+  td.name { font-weight: 600; white-space: nowrap; }
+  td.desc { color: var(--ink-soft); font-size: 11.5px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.ctr { text-align: center; white-space: nowrap; }
+  .tag { display: inline-block; margin-left: 6px; font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    font-weight: 600; vertical-align: middle; }
+  .tag-done { background: var(--brass); color: #fff; }
+  .tag-progress { background: var(--performer); color: #fff; }
+  .foot { margin-top: 28px; font-size: 11.5px; color: var(--ink-soft); }
+  .legend { font-size: 11.5px; color: var(--ink-soft); margin: 10px 0 14px; }
+  .legend span { margin-right: 14px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>投鈴 — 本番曲目の選び直し</h1>
+  <div class="sub">作成: 2026-09-04（本人依頼「楽曲の選択をいちどし直そうと思います」への判断材料）</div>
+
+  <div class="brief">
+    <b>この資料で判断すること:</b> クライアント向けの本番曲目を、現在の「ぶんぶんぶん（完成版）・第九（検討中）」の
+    2曲から選び直すかどうか。
+    <ul>
+      <li>登録済み34曲のうち、3人編成で選べるのは29曲。4人以上前提の5曲（きよしこの夜・グリーンスリーブス・
+        夕焼け小焼け・大きな古時計・もろびとこぞりて）は現在選択肢から隠れている——演者を4人に増やす前提なら候補に入る。</li>
+      <li>パス率・リング本数は探索量300シードの簡易試走（本番用の8000シードではない）。順位の目安として見るための
+        ものであり、実際に選ぶ曲は <code>tools/optimize.mjs --budget 8000</code> で本気の探索をしてから
+        <code>tools/freeze.mjs</code> で焼き付ける。</li>
+      <li>「冒頭」は最初の音が演者間のパスで始まるか（本人方針でパス始まりを高く評価）。「和音」は保持キャッチ和音の
+        成立数/箇所数（多いほど演者1人で2音を同時に鳴らす見せ場が多い）。</li>
+    </ul>
+  </div>
+
+  <h2>3人編成で選べる29曲（パス率が高い順）</h2>
+  <div class="legend">
+    <span><span class="dot" style="background:#3d7a4a"></span>パス80%以上（見応えのある編成が作りやすい）</span>
+    <span><span class="dot" style="background:#a9822f"></span>60〜79%</span>
+    <span><span class="dot" style="background:#b2472e"></span>60%未満（現状は難曲寄り）</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>曲名</th><th>由来・特徴</th><th>BPM</th><th>音数</th>
+      <th>パス率</th><th>リング</th><th>冒頭</th><th>和音</th>
+    </tr></thead>
+    <tbody>
+<tr>
+      <td class="rank">1</td>
+      <td class="name">オー・スザンナ</td>
+      <td class="desc">フォスター作(PD)</td>
+      <td class="num">69</td>
+      <td class="num">33</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">97%</td>
+      <td class="num">7本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">2</td>
+      <td class="name">ちょうちょう</td>
+      <td class="desc">ドイツ民謡（Hänschen klein）</td>
+      <td class="num">60</td>
+      <td class="num">24</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">96%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">3</td>
+      <td class="name">蛍の光</td>
+      <td class="desc">スコットランド民謡(蛍の光)</td>
+      <td class="num">71</td>
+      <td class="num">51</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">92%</td>
+      <td class="num">6本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">1/1</td>
+    </tr>
+<tr>
+      <td class="rank">4</td>
+      <td class="name">ハッピーバースデー</td>
+      <td class="desc">Good Morning to All(1893)が原曲</td>
+      <td class="num">34</td>
+      <td class="num">25</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">92%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">5</td>
+      <td class="name">疾風（はやて）</td>
+      <td class="desc">収録曲で最速</td>
+      <td class="num">183</td>
+      <td class="num">35</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">91%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">6</td>
+      <td class="name">きらきら星</td>
+      <td class="desc">誰もが知る定番(PD)</td>
+      <td class="num">36</td>
+      <td class="num">42</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">90%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">7</td>
+      <td class="name">コロブチカ（テトリスのテーマ）</td>
+      <td class="desc">ロシア民謡（テトリスのテーマ）</td>
+      <td class="num">46</td>
+      <td class="num">58</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">89%</td>
+      <td class="num">11本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">1/1</td>
+    </tr>
+<tr>
+      <td class="rank">8</td>
+      <td class="name">三つ巴</td>
+      <td class="desc">3音=リング3本、3人が1本ずつ持つ最小構成</td>
+      <td class="num">97</td>
+      <td class="num">33</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">88%</td>
+      <td class="num">4本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">9</td>
+      <td class="name">アメイジング・グレイス</td>
+      <td class="desc">ペンタトニック</td>
+      <td class="num">90</td>
+      <td class="num">33</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">87%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">2/2</td>
+    </tr>
+<tr>
+      <td class="rank">10</td>
+      <td class="name">投鈴ワルツ</td>
+      <td class="desc">3拍子（投鈴オリジナル）</td>
+      <td class="num">160</td>
+      <td class="num">44</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">84%</td>
+      <td class="num">5本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">11</td>
+      <td class="name">さくらさくら</td>
+      <td class="desc">日本古謡・陰旋法</td>
+      <td class="num">42</td>
+      <td class="num">42</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">83%</td>
+      <td class="num">8本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr class="hi">
+      <td class="rank">12</td>
+      <td class="name">ぶんぶんぶん<span class="tag tag-done">完成版・確定済み</span></td>
+      <td class="desc">ボヘミア民謡・完成版として確定済み</td>
+      <td class="num">60</td>
+      <td class="num">35</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">82%</td>
+      <td class="num">5本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">2/3</td>
+    </tr>
+<tr>
+      <td class="rank">13</td>
+      <td class="name">グーチョキパー（フレール・ジャック）</td>
+      <td class="desc">フランス伝承の輪唱</td>
+      <td class="num">42</td>
+      <td class="num">32</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">81%</td>
+      <td class="num">11本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">14</td>
+      <td class="name">五音の橋（オリジナル）</td>
+      <td class="desc">ヨナ抜き長音階の5音（オリジナル）</td>
+      <td class="num">87</td>
+      <td class="num">33</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">80%</td>
+      <td class="num">9本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">3/3</td>
+    </tr>
+<tr>
+      <td class="rank">15</td>
+      <td class="name">宵待ち（オリジナル・和風）</td>
+      <td class="desc">都節音階・和風（オリジナル）</td>
+      <td class="num">114</td>
+      <td class="num">23</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">80%</td>
+      <td class="num">6本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">3/3</td>
+    </tr>
+<tr>
+      <td class="rank">16</td>
+      <td class="name">かえるの合唱</td>
+      <td class="desc">ドイツ民謡（輪唱の定番）</td>
+      <td class="num">68</td>
+      <td class="num">25</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">80%</td>
+      <td class="num">9本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">17</td>
+      <td class="name">ロンドン橋</td>
+      <td class="desc">イギリス伝承</td>
+      <td class="num">60</td>
+      <td class="num">24</td>
+      <td class="num" style="color:#a9822f;font-weight:700">79%</td>
+      <td class="num">7本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">18</td>
+      <td class="name">ジングルベル</td>
+      <td class="desc">J.ピアポント・サビのみ</td>
+      <td class="num">50</td>
+      <td class="num">49</td>
+      <td class="num" style="color:#a9822f;font-weight:700">78%</td>
+      <td class="num">9本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">19</td>
+      <td class="name">重ね鈴（オリジナル・和音の稿）</td>
+      <td class="desc">保持キャッチ和音を先に置いた曲（オリジナル）</td>
+      <td class="num">60</td>
+      <td class="num">36</td>
+      <td class="num" style="color:#a9822f;font-weight:700">77%</td>
+      <td class="num">7本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">6/6</td>
+    </tr>
+<tr>
+      <td class="rank">20</td>
+      <td class="name">ふるさと</td>
+      <td class="desc">岡野貞一・3拍子の唱歌の代表</td>
+      <td class="num">34</td>
+      <td class="num">45</td>
+      <td class="num" style="color:#a9822f;font-weight:700">76%</td>
+      <td class="num">12本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">21</td>
+      <td class="name">こげこげボート</td>
+      <td class="desc">英米伝承の輪唱・6/8拍子</td>
+      <td class="num">40</td>
+      <td class="num">23</td>
+      <td class="num" style="color:#a9822f;font-weight:700">74%</td>
+      <td class="num">7本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">22</td>
+      <td class="name">チューリップ</td>
+      <td class="desc">文部省唱歌(PD)</td>
+      <td class="num">84</td>
+      <td class="num">26</td>
+      <td class="num" style="color:#a9822f;font-weight:700">73%</td>
+      <td class="num">6本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr class="hi">
+      <td class="rank">23</td>
+      <td class="name">よろこびの歌（第九）<span class="tag tag-progress">検討中（クライアント実施曲）</span></td>
+      <td class="desc">ベートーヴェン(PD)・クライアント実施曲</td>
+      <td class="num">72</td>
+      <td class="num">30</td>
+      <td class="num" style="color:#a9822f;font-weight:700">73%</td>
+      <td class="num">7本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">24</td>
+      <td class="name">四つ辻</td>
+      <td class="desc">4音を4拍周期で巡らせる曲</td>
+      <td class="num">154</td>
+      <td class="num">31</td>
+      <td class="num" style="color:#a9822f;font-weight:700">71%</td>
+      <td class="num">4本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">0/1</td>
+    </tr>
+<tr>
+      <td class="rank">25</td>
+      <td class="name">ゆかいな牧場</td>
+      <td class="desc">アメリカ民謡（Old MacDonald）</td>
+      <td class="num">60</td>
+      <td class="num">38</td>
+      <td class="num" style="color:#a9822f;font-weight:700">71%</td>
+      <td class="num">9本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">26</td>
+      <td class="name">草競馬</td>
+      <td class="desc">フォスター作</td>
+      <td class="num">46</td>
+      <td class="num">44</td>
+      <td class="num" style="color:#a9822f;font-weight:700">68%</td>
+      <td class="num">8本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">27</td>
+      <td class="name">Swing Low, Sweet Chariot</td>
+      <td class="desc">黒人霊歌(PD)</td>
+      <td class="num">99</td>
+      <td class="num">40</td>
+      <td class="num" style="color:#a9822f;font-weight:700">67%</td>
+      <td class="num">7本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">1/1</td>
+    </tr>
+<tr>
+      <td class="rank">28</td>
+      <td class="name">聖者の行進</td>
+      <td class="desc">ゴスペルの定番(PD)</td>
+      <td class="num">114</td>
+      <td class="num">50</td>
+      <td class="num" style="color:#b2472e;font-weight:700">59%</td>
+      <td class="num">8本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">1/1</td>
+    </tr>
+<tr>
+      <td class="rank">29</td>
+      <td class="name">メリーさんのひつじ</td>
+      <td class="desc">定番の童謡(PD)</td>
+      <td class="num">88</td>
+      <td class="num">26</td>
+      <td class="num" style="color:#b2472e;font-weight:700">58%</td>
+      <td class="num">8本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+    </tbody>
+  </table>
+
+  <h2>4人以上前提の5曲（現在は非表示）</h2>
+  <div class="h2-note">演者を4人に増やす選択肢がある場合のみ候補。今の3人編成のUIでは選べない。</div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>曲名</th><th>由来・特徴</th><th>BPM</th><th>音数</th>
+      <th>パス率</th><th>リング</th><th>冒頭</th><th>和音</th>
+    </tr></thead>
+    <tbody>
+<tr>
+      <td class="rank">1</td>
+      <td class="name">きよしこの夜</td>
+      <td class="desc">全音階9音・34BPMまで落ちる難曲</td>
+      <td class="num">54</td>
+      <td class="num">43</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">100%</td>
+      <td class="num">10本</td>
+      <td class="ctr">パス</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">2</td>
+      <td class="name">もろびとこぞりて</td>
+      <td class="desc">賛美歌 Antioch（ヘンデル由来説）</td>
+      <td class="num">66</td>
+      <td class="num">28</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">96%</td>
+      <td class="num">9本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">3</td>
+      <td class="name">大きな古時計</td>
+      <td class="desc">H.C.ワーク・音高9つ</td>
+      <td class="num">40</td>
+      <td class="num">78</td>
+      <td class="num" style="color:#3d7a4a;font-weight:700">83%</td>
+      <td class="num">12本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">4</td>
+      <td class="name">夕焼け小焼け</td>
+      <td class="desc">草川信・音域2オクターブ近い難曲</td>
+      <td class="num">60</td>
+      <td class="num">48</td>
+      <td class="num" style="color:#a9822f;font-weight:700">73%</td>
+      <td class="num">16本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">－</td>
+    </tr>
+<tr>
+      <td class="rank">5</td>
+      <td class="name">グリーンスリーブス</td>
+      <td class="desc">音高10で最多・パス27%の難曲</td>
+      <td class="num">41</td>
+      <td class="num">38</td>
+      <td class="num" style="color:#b2472e;font-weight:700">26%</td>
+      <td class="num">13本</td>
+      <td class="ctr">自分</td>
+      <td class="ctr">0/1</td>
+    </tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    元データ: js/songs.js（tools/make_midi.py生成）・tools/optimize.mjs --dry --budget 300 の実測。<br>
+    本ファイルはローカル確認用。公開・外部共有はしない。
+  </div>
+</div>
+</body>
+</html>
