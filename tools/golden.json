@@ -1,6 +1,6 @@
 {
- "recordedAt": "2026-09-03",
- "schedulerSrcHash": "dc46f643e6df0de2",
+ "recordedAt": "2026-09-05",
+ "schedulerSrcHash": "858ffbcc2bf952b6",
  "note": "tools/golden.mjs --record で生成。_scheduleOnce の結果全体のsha256先頭16桁。",
  "cases": {
   "saints:0": "4541a367e4b55786",
@@ -477,6 +477,19 @@
   "frere:10": "92eb1d7b6453d20f",
   "frere:11": "96c12da697fe145b",
   "frere:7827": "90caa2ccd0a6b119",
-  "frere:3:fix": "113220eba5503bc5"
+  "frere:3:fix": "113220eba5503bc5",
+  "antagata:0": "3d371128c030f28e",
+  "antagata:1": "c15d945dcd8c5ef5",
+  "antagata:2": "c5fa50048ecf6081",
+  "antagata:3": "ab3afdc8695a2dbd",
+  "antagata:4": "b73a3f1661f60ef8",
+  "antagata:5": "daea896752b92290",
+  "antagata:6": "3d371128c030f28e",
+  "antagata:7": "c15d945dcd8c5ef5",
+  "antagata:8": "7396bacc88432d01",
+  "antagata:9": "cddc6ba27a61c17a",
+  "antagata:10": "74304568d4523a82",
+  "antagata:11": "6e67f6ebf4c82d40",
+  "antagata:3:fix": "3208d080481b94ac"
  }
 }

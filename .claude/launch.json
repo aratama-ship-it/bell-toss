@@ -3,8 +3,11 @@
   "configurations": [
     {
       "name": "torei-bell-toss",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8934"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.mjs",
+        "8934"
+      ],
       "port": 8934
     }
   ]
