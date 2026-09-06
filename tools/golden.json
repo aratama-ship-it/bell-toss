@@ -1,5 +1,5 @@
 {
- "recordedAt": "2026-09-05",
+ "recordedAt": "2026-09-06",
  "schedulerSrcHash": "858ffbcc2bf952b6",
  "note": "tools/golden.mjs --record で生成。_scheduleOnce の結果全体のsha256先頭16桁。",
  "cases": {
@@ -490,6 +490,20 @@
   "antagata:9": "cddc6ba27a61c17a",
   "antagata:10": "74304568d4523a82",
   "antagata:11": "6e67f6ebf4c82d40",
-  "antagata:3:fix": "3208d080481b94ac"
+  "antagata:3:fix": "3208d080481b94ac",
+  "donguri:0": "be32511769fd0e36",
+  "donguri:1": "a05ad6430f1b8b88",
+  "donguri:2": "60aadef20a6f192c",
+  "donguri:3": "6a6451e52f01a25b",
+  "donguri:4": "39d61de8907d5072",
+  "donguri:5": "330ca08b784f8c91",
+  "donguri:6": "20c67076f3327dc1",
+  "donguri:7": "cf96168ad32043fe",
+  "donguri:8": "a05ad6430f1b8b88",
+  "donguri:9": "de7d1dae683c0d21",
+  "donguri:10": "aa5fa7324940e6e4",
+  "donguri:11": "cf6f0438c7dc9563",
+  "donguri:447": "e8562ab2c0ce92f1",
+  "donguri:3:fix": "1b76604d08f35928"
  }
 }

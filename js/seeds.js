@@ -43,5 +43,6 @@ TOREI.SEEDS = {
   "kusakeiba": 1039,
   "rowboat": 431,
   "frere": 7827,
-  "antagata": 11
+  "antagata": 11,
+  "donguri": 447
 };
